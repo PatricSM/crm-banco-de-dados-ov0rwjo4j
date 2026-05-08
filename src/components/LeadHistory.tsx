@@ -1,89 +1,134 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Historico } from '@/types'
-import { getHistoricoByLead, createHistorico } from '@/services/historico'
-import { useRealtime } from '@/hooks/use-realtime'
-import { Input } from '@/components/ui/input'
+import { createHistorico } from '@/services/historico'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
+import { Plus, Clock } from 'lucide-react'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { toast } from '@/hooks/use-toast'
 
-export function LeadHistory({ leadId }: { leadId: string }) {
-  const [history, setHistory] = useState<Historico[]>([])
-  const [acao, setAcao] = useState('')
+interface LeadHistoryProps {
+  leadId: string
+  history: Historico[]
+}
+
+export function LeadHistory({ leadId, history }: LeadHistoryProps) {
+  const [acao, setAcao] = useState('Observação')
   const [detalhes, setDetalhes] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  const loadData = async (isRealtime = false) => {
-    if (!isRealtime) setLoading(true)
-    setHistory(await getHistoricoByLead(leadId))
-    if (!isRealtime) setLoading(false)
-  }
-  useEffect(() => {
-    loadData()
-  }, [leadId])
-  useRealtime('historico', () => loadData(true))
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!acao) return
-    await createHistorico({ lead_id: leadId, acao, detalhes })
-    setAcao('')
-    setDetalhes('')
+    if (!detalhes.trim()) return
+    setSaving(true)
+    try {
+      await createHistorico({ lead_id: leadId, acao, detalhes })
+      setAcao('Observação')
+      setDetalhes('')
+      setOpen(false)
+      toast({ title: 'Nota adicionada com sucesso!' })
+    } catch (err: any) {
+      toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const getDotColor = (acaoStr: string) => {
+    const l = acaoStr.toLowerCase()
+    if (l.includes('ligação') || l.includes('telefone')) return 'bg-blue-500'
+    if (l.includes('email') || l.includes('e-mail')) return 'bg-violet-500'
+    if (l.includes('agendamento') || l.includes('agendado')) return 'bg-amber-500'
+    if (l.includes('atendimento') || l.includes('status')) return 'bg-emerald-500'
+    if (l.includes('orçamento')) return 'bg-teal-500'
+    return 'bg-slate-400'
   }
 
   return (
-    <div className="flex flex-col h-full animate-slide-up">
-      <div className="border-l-2 border-primary/20 ml-3 pl-6 space-y-6 max-h-[400px] overflow-y-auto pb-4 pr-2">
-        {loading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="relative">
-              <div className="absolute -left-[31px] top-1.5 h-3 w-3 rounded-full bg-primary/20 ring-4 ring-card" />
-              <Skeleton className="h-4 w-32 mb-2" />
-              <Skeleton className="h-3 w-48 mb-2" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-          ))
-        ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum histórico registrado.</p>
-        ) : (
-          history.map((h) => (
-            <div
-              key={h.id}
-              className="relative hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors group"
-            >
-              <div className="absolute -left-[23px] top-3.5 h-3 w-3 rounded-full bg-primary ring-4 ring-card transition-transform group-hover:scale-125" />
-              <p className="text-sm font-semibold text-slate-900">{h.acao}</p>
-              {h.detalhes && <p className="text-sm text-slate-600 mt-0.5">{h.detalhes}</p>}
-              <p className="text-xs text-muted-foreground/60 mt-1">
-                {new Date(h.created).toLocaleString('pt-BR')}
-              </p>
-            </div>
-          ))
-        )}
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+          <Clock className="w-5 h-5 text-primary/60" /> Histórico de Interações
+        </h3>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8">
+              <Plus className="w-4 h-4 mr-2" /> Adicionar Nota
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <form onSubmit={handleAdd}>
+              <DialogHeader>
+                <DialogTitle>Nova Interação</DialogTitle>
+                <DialogDescription>
+                  Registre uma nova observação, ligação ou contato feito com o lead.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <Textarea
+                  placeholder="Detalhes da interação..."
+                  value={detalhes}
+                  onChange={(e) => setDetalhes(e.target.value)}
+                  className="min-h-[120px]"
+                  required
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar Nota'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <form
-        onSubmit={handleAdd}
-        className="mt-8 flex flex-col gap-3 bg-muted/20 p-4 rounded-lg border"
-      >
-        <h4 className="text-sm font-medium flex items-center gap-2 mb-1">
-          <Plus className="h-4 w-4 text-primary" /> Nova Interação
-        </h4>
-        <Input
-          value={acao}
-          onChange={(e) => setAcao(e.target.value)}
-          placeholder="Ação (ex: Ligação realizada)"
-          required
-        />
-        <Input
-          value={detalhes}
-          onChange={(e) => setDetalhes(e.target.value)}
-          placeholder="Detalhes da interação (opcional)"
-        />
-        <Button type="submit" variant="secondary" className="self-end mt-1">
-          Registrar
-        </Button>
-      </form>
+      <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+        {history.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">
+            Nenhuma interação registrada.
+          </div>
+        ) : (
+          <div className="relative pl-5 border-l-2 border-slate-100 space-y-6 pb-6">
+            {history.map((h) => (
+              <div key={h.id} className="relative group">
+                <div
+                  className={`absolute -left-[25px] top-1.5 w-2.5 h-2.5 rounded-full ring-4 ring-white ${getDotColor(
+                    h.acao,
+                  )} transition-transform group-hover:scale-125`}
+                />
+                <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-100 p-3 rounded-lg transition-colors">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm text-slate-900">{h.acao}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(h.created), 'dd MMM, HH:mm', { locale: ptBR })}
+                    </span>
+                  </div>
+                  {h.detalhes && (
+                    <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {h.detalhes}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

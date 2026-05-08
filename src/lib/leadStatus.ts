@@ -18,3 +18,16 @@ export function leadStatusToTone(status: string): StatusTone {
       return 'neutral'
   }
 }
+
+export function orcamentoStatusToTone(status: string): StatusTone {
+  switch (status) {
+    case 'Pendente':
+      return 'pending'
+    case 'Aprovado':
+      return 'approved'
+    case 'Cancelado':
+      return 'cancelled'
+    default:
+      return 'neutral'
+  }
+}

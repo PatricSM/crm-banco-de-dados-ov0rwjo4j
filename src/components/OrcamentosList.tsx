@@ -1,11 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Orcamento } from '@/types'
-import {
-  getOrcamentosByLead,
-  createOrcamento,
-  updateOrcamento,
-  deleteOrcamento,
-} from '@/services/orcamentos'
+import { createOrcamento, updateOrcamento, deleteOrcamento } from '@/services/orcamentos'
 import { createHistorico } from '@/services/historico'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,46 +13,36 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
-import { Trash2, Plus } from 'lucide-react'
+import { Plus, FileText, Trash2 } from 'lucide-react'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { StatusChip } from './StatusChip'
+import { orcamentoStatusToTone } from '@/lib/leadStatus'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
-export function OrcamentosList({ leadId }: { leadId: string }) {
-  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
+interface OrcamentosListProps {
+  leadId: string
+  orcamentos: Orcamento[]
+}
+
+export function OrcamentosList({ leadId, orcamentos }: OrcamentosListProps) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<Partial<Orcamento>>({
     status: 'Pendente',
     forma_pagamento: 'Pix',
     desconto_aplicado: 0,
     valor_total: 0,
+    procedimentos: '',
   })
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      const data = await getOrcamentosByLead(leadId)
-      setOrcamentos(data)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (leadId && leadId !== 'novo') loadData()
-    else setLoading(false)
-  }, [leadId])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,235 +52,190 @@ export function OrcamentosList({ leadId }: { leadId: string }) {
     if (desc > valor * 0.2) {
       toast({
         title: 'Desconto Inválido',
-        description: 'O desconto máximo permitido é de 20%. Necessário aprovação do gestor.',
+        description: 'O desconto máximo permitido é de 20%.',
         variant: 'destructive',
       })
       return
     }
 
+    setSaving(true)
     try {
       await createOrcamento({ ...formData, lead_id: leadId })
       await createHistorico({
         lead_id: leadId,
         acao: 'Orçamento Criado',
-        detalhes: `Orçamento no valor de R$ ${valor} criado.`,
+        detalhes: `Orçamento de R$ ${valor.toFixed(2)} criado.`,
       })
       toast({ title: 'Orçamento salvo com sucesso!' })
-      setShowForm(false)
-      loadData()
+      setOpen(false)
+      setFormData({
+        status: 'Pendente',
+        forma_pagamento: 'Pix',
+        desconto_aplicado: 0,
+        valor_total: 0,
+        procedimentos: '',
+      })
     } catch (err: any) {
       toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' })
-    }
-  }
-
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    try {
-      await updateOrcamento(id, { status: newStatus as any })
-      toast({ title: 'Status atualizado!' })
-      loadData()
-    } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' })
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
+    if (!confirm('Excluir este orçamento permanentemente?')) return
     try {
       await deleteOrcamento(id)
       toast({ title: 'Orçamento excluído!' })
-      loadData()
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' })
     }
   }
 
-  if (leadId === 'novo') return null
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-semibold text-slate-800">Orçamentos e Controle Financeiro</h3>
-        {!showForm && (
-          <Button
-            onClick={() => setShowForm(true)}
-            size="sm"
-            variant="outline"
-            className="transition-transform hover:scale-105"
-          >
-            <Plus className="w-4 h-4 mr-2" /> Novo Orçamento
-          </Button>
-        )}
-      </div>
-
-      {showForm && (
-        <Card className="border-primary/20 shadow-sm animate-fade-in">
-          <CardContent className="pt-6">
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-primary/60" /> Orçamentos
+        </h3>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8">
+              <Plus className="w-4 h-4 mr-2" /> Novo
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <form onSubmit={handleSave}>
+              <DialogHeader>
+                <DialogTitle>Novo Orçamento</DialogTitle>
+                <DialogDescription>Crie uma proposta financeira para este lead.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
                 <div className="space-y-2">
                   <Label>Procedimentos</Label>
                   <Input
                     required
-                    value={formData.procedimentos || ''}
+                    value={formData.procedimentos}
                     onChange={(e) => setFormData({ ...formData, procedimentos: e.target.value })}
-                    placeholder="Ex: Clareamento, Limpeza"
+                    placeholder="Ex: Clareamento, Limpeza..."
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Valor Total (R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={formData.valor_total || ''}
-                    onChange={(e) =>
-                      setFormData({ ...formData, valor_total: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Desconto Aplicado (R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.desconto_aplicado || ''}
-                    onChange={(e) =>
-                      setFormData({ ...formData, desconto_aplicado: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Validade</Label>
-                  <Input
-                    type="date"
-                    required
-                    value={formData.validade?.slice(0, 10) || ''}
-                    onChange={(e) =>
-                      setFormData({ ...formData, validade: new Date(e.target.value).toISOString() })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Forma de Pagamento</Label>
-                  <Select
-                    value={formData.forma_pagamento}
-                    onValueChange={(v) => setFormData({ ...formData, forma_pagamento: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pix">Pix</SelectItem>
-                      <SelectItem value="Cartão">Cartão</SelectItem>
-                      <SelectItem value="Boleto">Boleto</SelectItem>
-                      <SelectItem value="Transferência">Transferência</SelectItem>
-                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status Inicial</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(v) => setFormData({ ...formData, status: v as any })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pendente">Pendente</SelectItem>
-                      <SelectItem value="Aprovado">Aprovado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end mt-4">
-                <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">Salvar Orçamento</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-24 w-full rounded-xl" />
-          <Skeleton className="h-24 w-full rounded-xl" />
-        </div>
-      ) : orcamentos.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">
-          Nenhum orçamento registrado para este lead.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {orcamentos.map((o) => (
-            <Card
-              key={o.id}
-              className="shadow-subtle border border-slate-100 hover:border-slate-300 hover:shadow-md transition-all"
-            >
-              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-slate-800">{o.procedimentos}</p>
-                  <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                      R$ {o.valor_total}
-                    </span>
-                    <span>•</span>
-                    <span>Desc: R$ {o.desconto_aplicado}</span>
-                    <span>•</span>
-                    <span>{o.forma_pagamento}</span>
-                    <span>•</span>
-                    <span>Validade: {new Date(o.validade).toLocaleDateString('pt-BR')}</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Valor Total (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={formData.valor_total || ''}
+                      onChange={(e) =>
+                        setFormData({ ...formData, valor_total: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Desconto (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.desconto_aplicado || ''}
+                      onChange={(e) =>
+                        setFormData({ ...formData, desconto_aplicado: Number(e.target.value) })
+                      }
+                    />
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <Select value={o.status} onValueChange={(v) => handleStatusChange(o.id, v)}>
-                    <SelectTrigger className="w-[130px] h-8 text-xs bg-slate-50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pendente">Pendente</SelectItem>
-                      <SelectItem value="Aprovado">Aprovado</SelectItem>
-                      <SelectItem value="Cancelado">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:bg-destructive/10 h-8 w-8 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir Orçamento?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Esta ação não pode ser desfeita e os dados deste orçamento serão perdidos.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDelete(o.id)}
-                          className="bg-destructive hover:bg-destructive/90 text-white"
-                        >
-                          Excluir
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Validade</Label>
+                    <Input
+                      type="date"
+                      required
+                      value={formData.validade?.slice(0, 10) || ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          validade: new Date(e.target.value).toISOString(),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Forma de Pgto</Label>
+                    <Select
+                      value={formData.forma_pagamento}
+                      onValueChange={(v) => setFormData({ ...formData, forma_pagamento: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Pix">Pix</SelectItem>
+                        <SelectItem value="Cartão">Cartão</SelectItem>
+                        <SelectItem value="Boleto">Boleto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-3 pr-2 -mr-2">
+        {orcamentos.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">
+            Nenhum orçamento registrado.
+          </div>
+        ) : (
+          orcamentos.map((o) => (
+            <div
+              key={o.id}
+              className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative group"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-xs font-mono font-medium text-slate-500">
+                  #QT-{o.id.slice(0, 6).toUpperCase()}
+                </span>
+                <StatusChip status={o.status} tone={orcamentoStatusToTone(o.status)} />
+              </div>
+
+              <div className="mb-3">
+                <p
+                  className="text-sm font-medium text-slate-800 line-clamp-1"
+                  title={o.procedimentos}
+                >
+                  {o.procedimentos || 'Sem descrição'}
+                </p>
+                <p className="text-xl font-bold text-slate-900 mt-1">
+                  R$ {o.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
+                <span>{format(new Date(o.created), 'dd MMM yyyy', { locale: ptBR })}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-slate-400 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleDelete(o.id)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
