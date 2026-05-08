@@ -12,6 +12,9 @@ migrate(
       leads.fields.add(new DateField({ name: 'data_proximo_contato' }))
     if (!leads.fields.getByName('objecoes')) leads.fields.add(new TextField({ name: 'objecoes' }))
 
+    const statusField = leads.fields.getByName('status')
+    statusField.values = ['Novo Contato', 'Agendado', 'Em Atendimento', 'Convertido', 'Perdido']
+
     app.save(leads)
 
     app.db().newQuery(`UPDATE leads SET status = 'Novo Contato' WHERE status = 'Novo'`).execute()

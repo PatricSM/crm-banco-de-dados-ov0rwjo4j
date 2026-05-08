@@ -6,7 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from '@/hooks/use-toast'
-import { Sparkles, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Sparkles, Mail, Lock, Eye, EyeOff, KeyRound } from 'lucide-react'
+
+const DEMO_ACCOUNTS = [
+  { role: 'Gestor', email: 'admin@aesthetix.crm', password: 'Skip@Pass' },
+  { role: 'Vendedor', email: 'vendedor@aesthetix.crm', password: 'Skip@Pass' },
+]
 
 export default function Login() {
   const { signIn } = useAuth()
@@ -139,8 +144,30 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"></div>
+          <div className="rounded-lg border border-dashed bg-muted/30 p-4">
+            <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <KeyRound className="h-3.5 w-3.5" />
+              Contas de demonstração — clique para preencher
+            </div>
+            <div className="space-y-2">
+              {DEMO_ACCOUNTS.map((acc) => (
+                <button
+                  key={acc.email}
+                  type="button"
+                  onClick={() => {
+                    setEmail(acc.email)
+                    setPassword(acc.password)
+                  }}
+                  className="w-full rounded-md border bg-card px-3 py-2 text-left text-xs transition hover:border-primary hover:bg-primary/5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{acc.role}</span>
+                    <span className="font-mono text-muted-foreground">{acc.password}</span>
+                  </div>
+                  <div className="mt-0.5 font-mono text-muted-foreground">{acc.email}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="text-center text-xs text-muted-foreground lg:hidden">

@@ -4,28 +4,28 @@ migrate(
 
     let admin
     try {
-      admin = app.findAuthRecordByEmail('_pb_users_auth_', 'patric.martins@adapta.org')
+      admin = app.findAuthRecordByEmail('_pb_users_auth_', 'admin@aesthetix.crm')
       admin.set('role', 'gestor')
       app.save(admin)
     } catch (_) {
       admin = new Record(users)
-      admin.setEmail('patric.martins@adapta.org')
+      admin.setEmail('admin@aesthetix.crm')
       admin.setPassword('Skip@Pass')
       admin.setVerified(true)
-      admin.set('name', 'Admin Gestor')
+      admin.set('name', 'Administrador')
       admin.set('role', 'gestor')
       app.save(admin)
     }
 
     let vendedor
     try {
-      vendedor = app.findAuthRecordByEmail('_pb_users_auth_', 'vendedor@adapta.org')
+      vendedor = app.findAuthRecordByEmail('_pb_users_auth_', 'vendedor@aesthetix.crm')
     } catch (_) {
       vendedor = new Record(users)
-      vendedor.setEmail('vendedor@adapta.org')
+      vendedor.setEmail('vendedor@aesthetix.crm')
       vendedor.setPassword('Skip@Pass')
       vendedor.setVerified(true)
-      vendedor.set('name', 'João Vendedor')
+      vendedor.set('name', 'Vendedor Demo')
       vendedor.set('role', 'vendedor')
       app.save(vendedor)
     }
@@ -53,10 +53,10 @@ migrate(
       }
     }
 
-    seedLead('Empresa Alpha Ltda', 'Novo', 5000, admin.id)
+    seedLead('Empresa Alpha Ltda', 'Novo Contato', 5000, admin.id)
     seedLead('Beta Tech Services', 'Em Atendimento', 12500, vendedor.id)
     seedLead('Gama Corp Global', 'Agendado', 8500, vendedor.id)
-    seedLead('Delta Innovators Inc', 'Vendido', 20000, admin.id)
+    seedLead('Delta Innovators Inc', 'Convertido', 20000, admin.id)
     seedLead('Zeta Solutions', 'Perdido', 3000, admin.id)
   },
   (app) => {
