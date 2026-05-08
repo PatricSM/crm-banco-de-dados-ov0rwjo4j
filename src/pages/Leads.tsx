@@ -123,52 +123,6 @@ export default function LeadsPage() {
 
   return (
     <div className="max-w-[1600px] mx-auto animate-fade-in flex flex-col h-[calc(100vh-6rem)]">
-      <PageHeader
-        title="Leads"
-        subtitle="Gerencie seus contatos e oportunidades"
-        actions={
-          <div className="flex items-center gap-3">
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(v) => v && setViewMode(v as 'list' | 'kanban')}
-              className="bg-white border rounded-md p-0.5"
-            >
-              <ToggleGroupItem
-                value="list"
-                aria-label="Lista"
-                className="h-8 px-2 data-[state=on]:bg-slate-100"
-              >
-                <List className="h-4 w-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="kanban"
-                aria-label="Kanban"
-                className="h-8 px-2 data-[state=on]:bg-slate-100"
-              >
-                <Columns3 className="h-4 w-4" />
-              </ToggleGroupItem>
-            </ToggleGroup>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="shadow-sm">
-                  <Plus className="mr-2 h-4 w-4" /> Novo Lead
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Adicionar Novo Lead</DialogTitle>
-                  <DialogDescription>
-                    Preencha os dados abaixo para cadastrar um novo contato.
-                  </DialogDescription>
-                </DialogHeader>
-                <LeadForm onSave={handleCreateLead} />
-              </DialogContent>
-            </Dialog>
-          </div>
-        }
-      />
-
       <div className="flex flex-col sm:flex-row gap-3 mb-6 shrink-0">
         <div className="relative flex-1 sm:max-w-xs">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
