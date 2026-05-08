@@ -266,8 +266,8 @@ export default function Dashboard() {
             <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-600">Ticket Médio</CardTitle>
-                <div className="p-2 bg-blue-50 rounded-full group-hover:bg-blue-100 transition-colors">
-                  <Target className="h-4 w-4 text-blue-600" />
+                <div className="p-2 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
+                  <Target className="h-4 w-4 text-primary" />
                 </div>
               </CardHeader>
               <CardContent>
