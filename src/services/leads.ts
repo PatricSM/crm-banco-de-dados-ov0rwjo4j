@@ -7,9 +7,10 @@ export interface LeadsFilters {
   status?: string
   origem?: string
   colaboradorId?: string
+  search?: string
 }
 
-export const getLeads = async (filters?: LeadsFilters) => {
+const buildFilterString = (filters?: LeadsFilters) => {
   const filterParts: string[] = []
   if (filters?.dateFrom) filterParts.push(`created >= "${filters.dateFrom} 00:00:00"`)
   if (filters?.dateTo) filterParts.push(`created <= "${filters.dateTo} 23:59:59"`)
@@ -17,13 +18,26 @@ export const getLeads = async (filters?: LeadsFilters) => {
   if (filters?.origem && filters.origem !== 'all') filterParts.push(`origem = "${filters.origem}"`)
   if (filters?.colaboradorId && filters.colaboradorId !== 'all')
     filterParts.push(`colaborador_id = "${filters.colaboradorId}"`)
+  if (filters?.search) {
+    const s = filters.search.replace(/"/g, '\\"')
+    filterParts.push(`(nome ~ "${s}" || email ~ "${s}" || telefone ~ "${s}")`)
+  }
+  return filterParts.join(' && ')
+}
 
-  const filterString = filterParts.join(' && ')
-
+export const getLeads = async (filters?: LeadsFilters) => {
   return await pb.collection('leads').getFullList<Lead>({
-    filter: filterString,
+    filter: buildFilterString(filters),
     expand: 'colaborador_id',
     sort: '-created',
+  })
+}
+
+export const getLeadsPaginated = async (page: number, perPage: number, filters?: LeadsFilters) => {
+  return await pb.collection('leads').getList<Lead>(page, perPage, {
+    filter: buildFilterString(filters),
+    expand: 'colaborador_id',
+    sort: '-updated',
   })
 }
 

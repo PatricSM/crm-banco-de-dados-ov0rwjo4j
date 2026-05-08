@@ -1,20 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { getLeads, updateLead } from '@/services/leads'
-import { Lead } from '@/types'
+import { useState, useEffect, useCallback } from 'react'
+import { getLeads, getLeadsPaginated, updateLead, createLead } from '@/services/leads'
+import { getUsers } from '@/services/users'
+import { Lead, LeadStatus, User } from '@/types'
 import { useRealtime } from '@/hooks/use-realtime'
+import { PageHeader } from '@/components/PageHeader'
+import { LeadsList } from '@/components/leads/LeadsList'
+import { LeadsKanban } from '@/components/leads/LeadsKanban'
+import { LeadForm } from '@/components/LeadForm'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -23,321 +16,215 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Search, Calendar, Mail, Phone, MapPin, AlertCircle } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { List, Columns3, Search, Plus, Filter } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
-const STATUSES = ['Novo Contato', 'Agendado', 'Em Atendimento', 'Convertido', 'Perdido']
+const STATUS_OPTIONS = [
+  'Novo Contato',
+  'Agendado',
+  'Em Atendimento',
+  'Convertido',
+  'Perdido',
+  'Novo',
+  'Compareceu',
+  'Vendido',
+]
 
 export default function LeadsPage() {
-  const navigate = useNavigate()
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>(() => {
+    return (localStorage.getItem('leads-view-mode') as 'list' | 'kanban') || 'list'
+  })
   const [leads, setLeads] = useState<Lead[]>([])
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('todos')
-  const [loading, setLoading] = useState(true)
+  const [paginatedLeads, setPaginatedLeads] = useState<Lead[]>([])
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const loadData = async (isRealtime = false) => {
-    if (!isRealtime) setLoading(true)
-    const data = await getLeads()
-    setLeads(data)
-    if (!isRealtime) setLoading(false)
-  }
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [ownerFilter, setOwnerFilter] = useState('all')
+
+  const [users, setUsers] = useState<User[]>([])
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   useEffect(() => {
-    loadData()
+    localStorage.setItem('leads-view-mode', viewMode)
+  }, [viewMode])
+
+  useEffect(() => {
+    getUsers().then(setUsers).catch(console.error)
   }, [])
+
+  const loadData = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) setIsLoading(true)
+      try {
+        const filters = {
+          search: search.trim() ? search : undefined,
+          status: statusFilter,
+          colaboradorId: ownerFilter,
+        }
+
+        if (viewMode === 'list') {
+          const res = await getLeadsPaginated(page, 10, filters)
+          setPaginatedLeads(res.items)
+          setTotalPages(res.totalPages)
+        } else {
+          const res = await getLeads(filters)
+          setLeads(res)
+        }
+      } catch (err) {
+        toast({ title: 'Erro ao carregar leads', variant: 'destructive' })
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [viewMode, page, search, statusFilter, ownerFilter],
+  )
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      loadData()
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [loadData])
+
   useRealtime('leads', () => loadData(true))
 
-  const filteredLeads = useMemo(() => {
-    return leads.filter((l) => {
-      const matchSearch =
-        l.nome.toLowerCase().includes(search.toLowerCase()) ||
-        (l.origem && l.origem.toLowerCase().includes(search.toLowerCase())) ||
-        (l.email && l.email.toLowerCase().includes(search.toLowerCase())) ||
-        (l.telefone && l.telefone.includes(search))
-      const matchStatus = statusFilter === 'todos' || l.status === statusFilter
-      return matchSearch && matchStatus
-    })
-  }, [leads, search, statusFilter])
-
-  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
-    e.preventDefault()
-    const leadId = e.dataTransfer.getData('leadId')
-    if (!leadId) return
-
-    const lead = leads.find((l) => l.id === leadId)
-    if (lead && lead.status !== newStatus) {
-      setLeads(leads.map((l) => (l.id === leadId ? { ...l, status: newStatus as any } : l)))
-      try {
-        await updateLead(leadId, { status: newStatus as any })
-        toast({ title: 'Status Atualizado' })
-      } catch (err) {
-        toast({ title: 'Erro ao atualizar status', variant: 'destructive' })
-        loadData()
-      }
+  const handleStatusChange = async (leadId: string, newStatus: LeadStatus) => {
+    try {
+      await updateLead(leadId, { status: newStatus })
+      toast({ title: 'Status atualizado com sucesso' })
+      loadData(true)
+    } catch (error) {
+      toast({ title: 'Erro ao atualizar status', variant: 'destructive' })
     }
   }
 
-  const KanbanColumn = ({ status }: { status: string }) => {
-    const colLeads = filteredLeads.filter((l) => l.status === status)
-    return (
-      <div
-        onDrop={(e) => handleDrop(e, status)}
-        onDragOver={(e) => e.preventDefault()}
-        className="flex flex-col gap-3 w-[320px] shrink-0 bg-slate-100/80 rounded-xl p-4 h-full border border-slate-200/60 overflow-y-auto shadow-sm"
-      >
-        <h3 className="font-semibold text-sm flex items-center justify-between text-slate-700">
-          {status}{' '}
-          <Badge variant="secondary" className="bg-slate-200">
-            {colLeads.length}
-          </Badge>
-        </h3>
-        <div className="flex flex-col gap-3 min-h-[100px]">
-          {colLeads.map((l) => {
-            const isDelayed =
-              l.data_proximo_contato && new Date(l.data_proximo_contato) < new Date()
-
-            return (
-              <div
-                key={l.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('leadId', l.id)}
-                onClick={() => navigate(`/leads/${l.id}`)}
-                className="group"
-              >
-                <Card className="hover:shadow-md transition-all border-none shadow-sm cursor-grab active:cursor-grabbing group-hover:-translate-y-1 duration-300">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-2 gap-2">
-                      <p className="font-semibold text-slate-900 line-clamp-1">{l.nome}</p>
-                      {isDelayed && <AlertCircle className="w-4 h-4 text-destructive shrink-0" />}
-                    </div>
-
-                    <div className="space-y-1.5 mt-2">
-                      {l.telefone && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                          <Phone className="w-3 h-3" /> {l.telefone}
-                        </p>
-                      )}
-                      {l.email && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 truncate">
-                          <Mail className="w-3 h-3" /> {l.email}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 truncate">
-                        <Target className="w-3 h-3" /> {l.procedimento_interesse || 'Não informado'}
-                      </p>
-                      {l.origem && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 truncate">
-                          <MapPin className="w-3 h-3" /> {l.origem}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-4 gap-2">
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline" className="text-[10px] bg-slate-50">
-                          {l.tentativas_contato || 0} Tentativas
-                        </Badge>
-                        {isDelayed && (
-                          <Badge variant="destructive" className="text-[10px]">
-                            Atrasado
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />{' '}
-                        {new Date(l.created).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
+  const handleCreateLead = async (data: Partial<Lead>) => {
+    try {
+      await createLead(data)
+      toast({ title: 'Lead criado com sucesso' })
+      setIsDialogOpen(false)
+      loadData(true)
+    } catch (error) {
+      toast({ title: 'Erro ao criar lead', variant: 'destructive' })
+    }
   }
 
   return (
-    <div className="h-[calc(100vh-100px)] flex flex-col space-y-6 max-w-[1600px] mx-auto animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Gerenciamento de Leads
-          </h1>
-          <p className="text-muted-foreground">
-            Acompanhe seu pipeline e arraste os cards para atualizar o status.
-          </p>
+    <div className="max-w-[1600px] mx-auto animate-fade-in flex flex-col h-[calc(100vh-6rem)]">
+      <PageHeader
+        title="Leads"
+        subtitle="Gerencie seus contatos e oportunidades"
+        actions={
+          <div className="flex items-center gap-3">
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && setViewMode(v as 'list' | 'kanban')}
+              className="bg-white border rounded-md p-0.5"
+            >
+              <ToggleGroupItem
+                value="list"
+                aria-label="Lista"
+                className="h-8 px-2 data-[state=on]:bg-slate-100"
+              >
+                <List className="h-4 w-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="kanban"
+                aria-label="Kanban"
+                className="h-8 px-2 data-[state=on]:bg-slate-100"
+              >
+                <Columns3 className="h-4 w-4" />
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="shadow-sm">
+                  <Plus className="mr-2 h-4 w-4" /> Novo Lead
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Adicionar Novo Lead</DialogTitle>
+                  <DialogDescription>
+                    Preencha os dados abaixo para cadastrar um novo contato.
+                  </DialogDescription>
+                </DialogHeader>
+                <LeadForm onSave={handleCreateLead} />
+              </DialogContent>
+            </Dialog>
+          </div>
+        }
+      />
+
+      <div className="flex flex-col sm:flex-row gap-3 mb-6 shrink-0">
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar (Nome, Email, Tel)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 bg-white"
+          />
         </div>
-        <Button asChild className="shrink-0 hover:scale-105 transition-transform shadow-sm">
-          <Link to="/leads/novo">
-            <Plus className="mr-2 h-4 w-4" /> Novo Lead
-          </Link>
-        </Button>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-[180px] bg-white">
+            <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os Status</SelectItem>
+            {STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="w-full sm:w-[200px] bg-white">
+            <SelectValue placeholder="Responsável" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os Responsáveis</SelectItem>
+            {users.map((u) => (
+              <SelectItem key={u.id} value={u.id}>
+                {u.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <Tabs defaultValue="kanban" className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-3 rounded-xl border shadow-subtle">
-          <TabsList className="w-fit">
-            <TabsTrigger value="kanban">Kanban</TabsTrigger>
-            <TabsTrigger value="lista">Lista</TabsTrigger>
-          </TabsList>
-
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar (Nome, Email, Tel)..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 bg-white"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40 bg-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os Status</SelectItem>
-                {STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {viewMode === 'list' ? (
+          <div className="h-full overflow-y-auto pr-1">
+            <LeadsList
+              leads={paginatedLeads}
+              isLoading={isLoading}
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+            />
           </div>
-        </div>
-
-        <TabsContent value="kanban" className="flex-1 overflow-x-auto mt-4 pb-4 outline-none">
-          {loading ? (
-            <div className="flex gap-4 h-full min-h-[500px]">
-              {STATUSES.map((s) => (
-                <div
-                  key={s}
-                  className="flex flex-col gap-3 w-[320px] shrink-0 bg-slate-100/50 rounded-xl p-4 h-full border border-slate-200/60 shadow-sm"
-                >
-                  <Skeleton className="h-6 w-24 mb-2" />
-                  <Skeleton className="h-36 w-full rounded-xl" />
-                  <Skeleton className="h-36 w-full rounded-xl" />
-                  <Skeleton className="h-36 w-full rounded-xl" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex gap-4 h-full min-h-[500px]">
-              {STATUSES.map((s) => (
-                <KanbanColumn key={s} status={s} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent
-          value="lista"
-          className="flex-1 overflow-y-auto mt-4 bg-white rounded-xl shadow-subtle border outline-none"
-        >
-          {loading ? (
-            <div className="p-4 space-y-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Interesse</TableHead>
-                  <TableHead className="text-center">Tentativas</TableHead>
-                  <TableHead>Próximo Contato</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLeads.map((l) => {
-                  const isDelayed =
-                    l.data_proximo_contato && new Date(l.data_proximo_contato) < new Date()
-                  return (
-                    <TableRow
-                      key={l.id}
-                      className="cursor-pointer hover:bg-slate-50 transition-colors"
-                      onClick={() => navigate(`/leads/${l.id}`)}
-                    >
-                      <TableCell className="font-medium">
-                        {l.nome}
-                        {l.telefone && (
-                          <span className="block text-xs text-muted-foreground font-normal">
-                            {l.telefone}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-slate-50">
-                          {l.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {l.procedimento_interesse || '-'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="bg-slate-100">
-                          {l.tentativas_contato || 0}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {l.data_proximo_contato ? (
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-sm ${isDelayed ? 'text-destructive font-medium' : 'text-muted-foreground'}`}
-                            >
-                              {new Date(l.data_proximo_contato).toLocaleString('pt-BR', {
-                                dateStyle: 'short',
-                                timeStyle: 'short',
-                              })}
-                            </span>
-                            {isDelayed && <AlertCircle className="w-4 h-4 text-destructive" />}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-                {filteredLeads.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      Nenhum lead encontrado.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </TabsContent>
-      </Tabs>
+        ) : (
+          <div className="h-full pr-1">
+            <LeadsKanban leads={leads} isLoading={isLoading} onStatusChange={handleStatusChange} />
+          </div>
+        )}
+      </div>
     </div>
-  )
-}
-function Target(props: any) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </svg>
   )
 }
