@@ -1,435 +1,511 @@
-import { useEffect, useState, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getLeads, LeadsFilters } from '@/services/leads'
-import { getAllOrcamentos } from '@/services/orcamentos'
-import { getUsers } from '@/services/users'
-import { Lead, User, Orcamento } from '@/types'
-import { Bar, BarChart, XAxis, YAxis, PieChart, Pie, Cell, Legend } from 'recharts'
-import { format, subDays, parseISO } from 'date-fns'
+import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  startOfQuarter,
+  endOfQuarter,
+  subQuarters,
+  startOfYear,
+  endOfYear,
+  subYears,
+  isWithinInterval,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+} from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import {
-  Activity,
-  Users,
-  DollarSign,
-  Calendar as CalendarIcon,
-  Target,
-  TrendingUp,
-  Trophy,
-} from 'lucide-react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
-import { cn } from '@/lib/utils'
-import { useAuth } from '@/hooks/use-auth'
-import { DateRange } from 'react-day-picker'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
-export default function Dashboard() {
-  const { user } = useAuth()
+import { PageHeader } from '@/components/PageHeader'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { Line, LineChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+
+import {
+  Plus,
+  Inbox,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  Wallet,
+  Target,
+  Activity,
+} from 'lucide-react'
+
+import { useRealtime } from '@/hooks/use-realtime'
+import { getLeads } from '@/services/leads'
+import { getAllOrcamentos } from '@/services/orcamentos'
+import { Lead, Orcamento } from '@/types'
+import { cn } from '@/lib/utils'
+
+type Timeframe = 'monthly' | 'quarterly' | 'yearly'
+
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+}
+
+const funnelColors: Record<string, string> = {
+  Novo: 'bg-blue-500',
+  Agendado: 'bg-violet-500',
+  'Em Atendimento': 'bg-amber-500',
+  Vendido: 'bg-emerald-500',
+  Perdido: 'bg-rose-500',
+}
+
+export default function Index() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
-  const [usersList, setUsersList] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [timeframe, setTimeframe] = useState<Timeframe>('monthly')
 
-  const [date, setDate] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 30),
-    to: new Date(),
-  })
-  const [status, setStatus] = useState<string>('all')
-  const [colaboradorId, setColaboradorId] = useState<string>('all')
+  const loadData = async () => {
+    try {
+      const [fetchedLeads, fetchedOrcamentos] = await Promise.all([getLeads(), getAllOrcamentos()])
+      setLeads(fetchedLeads)
+      setOrcamentos(fetchedOrcamentos)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    getUsers().then(setUsersList)
-    getAllOrcamentos().then(setOrcamentos)
+    loadData()
   }, [])
 
-  useEffect(() => {
-    setLoading(true)
-    const filters: LeadsFilters = {
-      dateFrom: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
-      dateTo: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
-      status,
-      colaboradorId,
+  useRealtime('leads', () => {
+    loadData()
+  })
+  useRealtime('orcamentos', () => {
+    loadData()
+  })
+
+  const data = useMemo(() => {
+    const now = new Date()
+    let currStart: Date, currEnd: Date, prevStart: Date, prevEnd: Date
+
+    if (timeframe === 'monthly') {
+      currStart = startOfMonth(now)
+      currEnd = endOfMonth(now)
+      prevStart = subMonths(currStart, 1)
+      prevEnd = subMonths(currEnd, 1)
+    } else if (timeframe === 'quarterly') {
+      currStart = startOfQuarter(now)
+      currEnd = endOfQuarter(now)
+      prevStart = subQuarters(currStart, 1)
+      prevEnd = subQuarters(currEnd, 1)
+    } else {
+      currStart = startOfYear(now)
+      currEnd = endOfYear(now)
+      prevStart = subYears(currStart, 1)
+      prevEnd = subYears(currEnd, 1)
     }
-    getLeads(filters).then((data) => {
-      setLeads(data)
-      setLoading(false)
-    })
-  }, [date, status, colaboradorId])
 
-  const totalLeads = leads.length
-  const convertidos = leads.filter((l) => l.status === 'Convertido').length
-
-  const orcamentosFiltrados = useMemo(() => {
-    return orcamentos.filter((o) => {
-      if (!date?.from || !date?.to) return true
-      const d = new Date(o.created)
-      return d >= date.from && d <= date.to
-    })
-  }, [orcamentos, date])
-
-  const orcamentosAprovados = orcamentosFiltrados.filter((o) => o.status === 'Aprovado')
-  const faturamento = orcamentosAprovados.reduce((acc, o) => acc + o.valor_total, 0)
-  const ticketMedio = orcamentosAprovados.length ? faturamento / orcamentosAprovados.length : 0
-  const taxaConversao = totalLeads ? (convertidos / totalLeads) * 100 : 0
-
-  const monthlyData = useMemo(() => {
-    const map = leads.reduce(
-      (acc, lead) => {
-        const dateObj = parseISO(lead.created)
-        const month = format(dateObj, 'MMM/yy', { locale: ptBR })
-        if (!acc[month])
-          acc[month] = {
-            name: month,
-            leads: 0,
-            convertidos: 0,
-            sortKey: format(dateObj, 'yyyy-MM'),
-          }
-        acc[month].leads += 1
-        if (lead.status === 'Convertido') acc[month].convertidos += 1
-        return acc
-      },
-      {} as Record<string, any>,
+    const currentLeads = leads.filter(
+      (l) => l.created && isWithinInterval(new Date(l.created), { start: currStart, end: currEnd }),
     )
-    return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-  }, [leads])
-
-  const origensData = useMemo(() => {
-    const map = leads.reduce(
-      (acc, lead) => {
-        const orig = lead.origem || 'Desconhecida'
-        if (!acc[orig]) acc[orig] = 0
-        acc[orig] += 1
-        return acc
-      },
-      {} as Record<string, number>,
+    const previousLeads = leads.filter(
+      (l) => l.created && isWithinInterval(new Date(l.created), { start: prevStart, end: prevEnd }),
+    )
+    const currentOrcamentos = orcamentos.filter(
+      (o) => o.created && isWithinInterval(new Date(o.created), { start: currStart, end: currEnd }),
     )
 
-    const colors = [
-      'hsl(var(--chart-1))',
-      'hsl(var(--chart-2))',
-      'hsl(var(--chart-3))',
-      'hsl(var(--chart-4))',
-      'hsl(var(--chart-5))',
-    ]
-    return Object.entries(map).map(([name, value], i) => ({
-      name,
-      value,
-      fill: colors[i % colors.length],
-    }))
-  }, [leads])
+    const activeLeadsCount = currentLeads.filter(
+      (l) => l.status !== 'Vendido' && l.status !== 'Convertido' && l.status !== 'Perdido',
+    ).length
 
-  const origensConfig = useMemo(() => {
-    return origensData.reduce(
-      (acc, curr) => {
-        acc[curr.name] = { label: curr.name, color: curr.fill }
-        return acc
-      },
-      {} as Record<string, any>,
-    )
-  }, [origensData])
+    const newLeadsCount = currentLeads.length
+    const prevNewLeadsCount = previousLeads.length
+    const newLeadsTrend =
+      prevNewLeadsCount === 0
+        ? newLeadsCount > 0
+          ? 100
+          : 0
+        : Math.round(((newLeadsCount - prevNewLeadsCount) / prevNewLeadsCount) * 100)
 
-  const ranking = useMemo(() => {
-    const map: Record<string, { id: string; name: string; points: number; avatar: string }> = {}
-    usersList.forEach((u) => {
-      map[u.id] = { id: u.id, name: u.name || u.email, avatar: u.avatar, points: 0 }
+    const openBudgetsCount = currentOrcamentos.filter((o) => o.status === 'Pendente').length
+    const pipelineRevenueValue = currentOrcamentos
+      .filter((o) => o.status === 'Aprovado')
+      .reduce((acc, o) => acc + (o.valor_total || 0), 0)
+
+    const chartData = []
+    if (timeframe === 'monthly') {
+      const days = eachDayOfInterval({
+        start: currStart,
+        end: Math.min(currEnd.getTime(), now.getTime()),
+      })
+      days.forEach((day) => {
+        const label = format(day, 'dd/MM')
+        const total = currentOrcamentos
+          .filter((o) => o.status === 'Aprovado' && format(new Date(o.created), 'dd/MM') === label)
+          .reduce((acc, o) => acc + (o.valor_total || 0), 0)
+        chartData.push({ label, total })
+      })
+    } else {
+      const months = eachMonthOfInterval({
+        start: currStart,
+        end: Math.min(currEnd.getTime(), now.getTime()),
+      })
+      months.forEach((month) => {
+        const label = format(month, 'MMM/yy', { locale: ptBR })
+        const total = currentOrcamentos
+          .filter(
+            (o) =>
+              o.status === 'Aprovado' &&
+              format(new Date(o.created), 'MMM/yy', { locale: ptBR }) === label,
+          )
+          .reduce((acc, o) => acc + (o.valor_total || 0), 0)
+        chartData.push({ label, total })
+      })
+    }
+
+    const funnelData = [
+      { label: 'Novo', status: 'Novo' },
+      { label: 'Agendado', status: 'Agendado' },
+      { label: 'Em Atendimento', status: 'Em Atendimento' },
+      { label: 'Vendido', status: 'Vendido' },
+      { label: 'Perdido', status: 'Perdido' },
+    ].map((stage) => {
+      const count = currentLeads.filter(
+        (l) =>
+          l.status === stage.status ||
+          (stage.status === 'Novo' && l.status === 'Novo Contato') ||
+          (stage.status === 'Vendido' && l.status === 'Convertido'),
+      ).length
+      const percentage = currentLeads.length > 0 ? (count / currentLeads.length) * 100 : 0
+      return { ...stage, count, percentage }
     })
 
-    orcamentosAprovados.forEach((o) => {
-      const colabId =
-        o.expand?.lead_id?.colaborador_id || leads.find((l) => l.id === o.lead_id)?.colaborador_id
-      if (colabId && map[colabId as string]) {
-        map[colabId as string].points += 1
+    const procedureGroups = new Map<
+      string,
+      { leads: number; conversions: number; revenue: number }
+    >()
+    currentLeads.forEach((l) => {
+      const proc = l.procedimento_interesse || 'Não informado'
+      if (!procedureGroups.has(proc)) {
+        procedureGroups.set(proc, { leads: 0, conversions: 0, revenue: 0 })
+      }
+      const group = procedureGroups.get(proc)!
+      group.leads += 1
+      if (l.status === 'Vendido' || l.status === 'Convertido') {
+        group.conversions += 1
       }
     })
 
-    return Object.values(map).sort((a, b) => b.points - a.points)
-  }, [orcamentosAprovados, usersList, leads])
+    currentOrcamentos
+      .filter((o) => o.status === 'Aprovado')
+      .forEach((o) => {
+        const lead = currentLeads.find((l) => l.id === o.lead_id)
+        if (lead) {
+          const proc = lead.procedimento_interesse || 'Não informado'
+          if (procedureGroups.has(proc)) {
+            procedureGroups.get(proc)!.revenue += o.valor_total || 0
+          }
+        }
+      })
+
+    const proceduresData = Array.from(procedureGroups.entries())
+      .map(([procedimento, d]) => ({ procedimento, ...d }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    return {
+      activeLeadsCount,
+      newLeadsCount,
+      newLeadsTrend,
+      openBudgetsCount,
+      pipelineRevenueValue,
+      chartData,
+      funnelData,
+      proceduresData,
+    }
+  }, [leads, orcamentos, timeframe])
+
+  const chartConfig = {
+    total: {
+      label: 'Receita',
+      color: 'hsl(var(--primary))',
+    },
+  }
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard Comercial</h1>
-        <p className="text-muted-foreground mt-1">
-          Acompanhe as métricas e o volume do seu funil de vendas baseado nos Orçamentos Aprovados.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-4 md:flex-row md:items-center bg-white p-4 rounded-lg shadow-subtle border border-slate-100">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              id="date"
-              variant="outline"
-              className={cn(
-                'w-[300px] justify-start text-left font-normal bg-white',
-                !date && 'text-muted-foreground',
-              )}
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Monitore o desempenho do seu funil e receita em tempo real."
+        actions={
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+            <Tabs
+              value={timeframe}
+              onValueChange={(v) => setTimeframe(v as Timeframe)}
+              className="w-full sm:w-auto"
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {date?.from ? (
-                date.to ? (
-                  <>
-                    {format(date.from, 'dd/MM/yyyy')} - {format(date.to, 'dd/MM/yyyy')}
-                  </>
-                ) : (
-                  format(date.from, 'dd/MM/yyyy')
-                )
-              ) : (
-                <span>Selecione um período</span>
-              )}
+              <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+                <TabsTrigger value="monthly">Mensal</TabsTrigger>
+                <TabsTrigger value="quarterly">Trimestral</TabsTrigger>
+                <TabsTrigger value="yearly">Anual</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button asChild className="w-full sm:w-auto">
+              <Link to="/leads?new=true">
+                <Plus className="size-4 mr-2" />
+                Novo Lead
+              </Link>
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={date?.from}
-              selected={date}
-              onSelect={setDate}
-              numberOfMonths={2}
-            />
-          </PopoverContent>
-        </Popover>
+          </div>
+        }
+      />
 
-        {user?.role === 'gestor' && (
-          <Select value={colaboradorId} onValueChange={setColaboradorId}>
-            <SelectTrigger className="w-[180px] bg-white">
-              <SelectValue placeholder="Colaborador" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os Colab.</SelectItem>
-              {usersList.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name || u.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <KpiCard
+          title="Leads Ativos"
+          value={data.activeLeadsCount.toString()}
+          icon={Activity}
+          loading={loading}
+        />
+        <KpiCard
+          title="Novos no período"
+          value={data.newLeadsCount.toString()}
+          trend={data.newLeadsTrend}
+          icon={Users}
+          loading={loading}
+        />
+        <KpiCard
+          title="Orçamentos Abertos"
+          value={data.openBudgetsCount.toString()}
+          icon={Target}
+          loading={loading}
+        />
+        <KpiCard
+          title="Receita Pipeline"
+          value={formatCurrency(data.pipelineRevenueValue)}
+          icon={Wallet}
+          loading={loading}
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="border-none shadow-subtle bg-white">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-4 rounded-full" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16" />
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <>
-            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600">Total de Leads</CardTitle>
-                <div className="p-2 bg-slate-50 rounded-full group-hover:bg-primary/10 transition-colors">
-                  <Users className="h-4 w-4 text-slate-500 group-hover:text-primary" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">{totalLeads}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                  Faturamento Aprovado
-                </CardTitle>
-                <div className="p-2 bg-emerald-50 rounded-full group-hover:bg-emerald-100 transition-colors">
-                  <DollarSign className="h-4 w-4 text-emerald-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-emerald-600">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                    faturamento,
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600">Ticket Médio</CardTitle>
-                <div className="p-2 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
-                  <Target className="h-4 w-4 text-primary" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                    ticketMedio,
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                  Taxa de Conversão
-                </CardTitle>
-                <div className="p-2 bg-amber-50 rounded-full group-hover:bg-amber-100 transition-colors">
-                  <Activity className="h-4 w-4 text-amber-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">{taxaConversao.toFixed(1)}%</div>
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
-        <Card className="border-none shadow-subtle bg-white col-span-1 md:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 shadow-sm">
           <CardHeader>
-            <CardTitle>Performance Mensal</CardTitle>
+            <CardTitle>Evolução do Faturamento</CardTitle>
+            <CardDescription>Receita de orçamentos aprovados ao longo do tempo</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <Skeleton className="h-[320px] w-full" />
+              <Skeleton className="w-full h-[300px]" />
+            ) : data.chartData.length === 0 || data.chartData.every((d) => d.total === 0) ? (
+              <EmptyState
+                title="Sem dados"
+                description="Não há orçamentos aprovados neste período."
+              />
             ) : (
-              <ChartContainer
-                config={{
-                  leads: { label: 'Leads', color: 'hsl(var(--primary))' },
-                  convertidos: { label: 'Convertidos', color: 'hsl(var(--chart-2))' },
-                }}
-                className="h-[320px] w-full"
-              >
-                <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tickMargin={10} />
-                  <YAxis axisLine={false} tickLine={false} tickMargin={10} allowDecimals={false} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar
-                    dataKey="leads"
-                    fill="var(--color-leads)"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={40}
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <LineChart
+                  data={data.chartData}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="hsl(var(--muted-foreground)/0.2)"
                   />
-                  <Bar
-                    dataKey="convertidos"
-                    fill="var(--color-convertidos)"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={40}
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                   />
-                </BarChart>
+                  <YAxis
+                    width={80}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                    tickFormatter={(val) => (val === 0 ? 'R$ 0' : `R$ ${(val / 1000).toFixed(0)}k`)}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent formatter={(val: any) => formatCurrency(Number(val))} />
+                    }
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="var(--color-total)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
               </ChartContainer>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-subtle bg-white col-span-1">
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Origem dos Leads</CardTitle>
+            <CardTitle>Funil de Vendas</CardTitle>
+            <CardDescription>Distribuição de leads por etapa</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {loading ? (
-              <Skeleton className="h-[320px] w-full" />
-            ) : (
-              <ChartContainer config={origensConfig} className="h-[320px] w-full">
-                <PieChart>
-                  <Pie
-                    data={origensData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    label
-                  >
-                    {origensData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Legend />
-                </PieChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 grid-cols-1">
-        <Card className="border-none shadow-subtle bg-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-amber-500" /> Ranking de Gestão (Orçamentos Aprovados)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4 mt-4">
-                <Skeleton className="h-16 w-full rounded-xl" />
-                <Skeleton className="h-16 w-full rounded-xl" />
-              </div>
-            ) : (
-              <div className="space-y-3 mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {ranking.map((u, idx) => (
-                  <div
-                    key={u.id}
-                    className="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 transition-colors border shadow-sm hover:scale-[1.02]"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm',
-                          idx === 0
-                            ? 'bg-amber-100 text-amber-600'
-                            : idx === 1
-                              ? 'bg-slate-200 text-slate-600'
-                              : idx === 2
-                                ? 'bg-orange-100 text-orange-600'
-                                : 'bg-primary/10 text-primary',
-                        )}
-                      >
-                        {idx + 1}º
-                      </div>
-                      <Avatar className="w-10 h-10 border">
-                        <AvatarImage src={u.avatar} />
-                        <AvatarFallback className="bg-primary/5 text-primary font-medium">
-                          {u.name.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-semibold text-slate-900">{u.name}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-primary">{u.points}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                        Aprovações
-                      </p>
-                    </div>
-                  </div>
+              <div className="space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
                 ))}
-                {ranking.length === 0 && (
-                  <div className="md:col-span-3 text-center py-10 text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
-                    Nenhuma aprovação registrada neste período.
-                  </div>
-                )}
               </div>
+            ) : data.funnelData.every((d) => d.count === 0) ? (
+              <EmptyState title="Sem leads" description="Nenhum lead encontrado neste período." />
+            ) : (
+              data.funnelData.map((stage) => (
+                <div key={stage.label} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-foreground">{stage.label}</span>
+                    <span className="text-muted-foreground font-medium">
+                      {stage.count} ({Math.round(stage.percentage)}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-secondary/50 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full transition-all duration-1000 ease-out',
+                        funnelColors[stage.label],
+                      )}
+                      style={{ width: `${stage.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
       </div>
+
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle>Desempenho por Procedimento</CardTitle>
+          <CardDescription>Análise de conversão e receita por tipo de procedimento</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : data.proceduresData.length === 0 ? (
+            <EmptyState
+              title="Sem procedimentos"
+              description="Não há leads com procedimentos informados neste período."
+            />
+          ) : (
+            <div className="rounded-xl border overflow-hidden">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>Procedimento</TableHead>
+                    <TableHead className="text-right">Leads</TableHead>
+                    <TableHead className="text-right">Conversões</TableHead>
+                    <TableHead className="text-right">Receita</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.proceduresData.map((proc) => (
+                    <TableRow key={proc.procedimento} className="hover:bg-muted/30">
+                      <TableCell className="font-medium">{proc.procedimento}</TableCell>
+                      <TableCell className="text-right">{proc.leads}</TableCell>
+                      <TableCell className="text-right">{proc.conversions}</TableCell>
+                      <TableCell className="text-right text-emerald-600 font-medium">
+                        {formatCurrency(proc.revenue)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function KpiCard({
+  title,
+  value,
+  trend,
+  icon: Icon,
+  loading,
+}: {
+  title: string
+  value: string
+  trend?: number
+  icon: any
+  loading: boolean
+}) {
+  return (
+    <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between space-y-0 pb-2">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="p-2 bg-primary/5 rounded-full">
+            <Icon className="size-4 text-primary" />
+          </div>
+        </div>
+        {loading ? (
+          <div className="mt-4 space-y-2">
+            <Skeleton className="h-8 w-1/2" />
+            {trend !== undefined && <Skeleton className="h-4 w-2/3" />}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <div className="text-3xl font-bold tracking-tight text-foreground">{value}</div>
+            {trend !== undefined && (
+              <p
+                className={cn(
+                  'text-xs mt-2 flex items-center gap-1 font-medium',
+                  trend >= 0 ? 'text-emerald-600' : 'text-rose-600',
+                )}
+              >
+                {trend >= 0 ? (
+                  <TrendingUp className="size-3" />
+                ) : (
+                  <TrendingDown className="size-3" />
+                )}
+                <span>
+                  {Math.abs(trend)}%
+                  <span className="text-muted-foreground ml-1">em relação ao período anterior</span>
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function EmptyState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <div className="size-14 rounded-full bg-muted flex items-center justify-center mb-4">
+        <Inbox className="size-6 text-muted-foreground/60" />
+      </div>
+      <h3 className="font-semibold text-lg text-foreground">{title}</h3>
+      <p className="text-muted-foreground text-sm max-w-[280px] mt-1.5 leading-relaxed">
+        {description}
+      </p>
     </div>
   )
 }
