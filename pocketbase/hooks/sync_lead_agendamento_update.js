@@ -1,4 +1,4 @@
-function syncLead(e) {
+onRecordAfterUpdateSuccess((e) => {
   const leadId = e.record.getString('lead_id')
   if (!leadId) return e.next()
 
@@ -68,8 +68,4 @@ function syncLead(e) {
     console.log('Error syncing lead agendamento:', err.message || err)
   }
   return e.next()
-}
-
-onRecordAfterCreateSuccess(syncLead, 'agendamentos')
-onRecordAfterUpdateSuccess(syncLead, 'agendamentos')
-onRecordAfterDeleteSuccess(syncLead, 'agendamentos')
+}, 'agendamentos')
