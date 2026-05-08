@@ -20,6 +20,7 @@ import {
 import { AppSidebar } from './AppSidebar'
 import { useToast } from '@/hooks/use-toast'
 import { LeadForm } from './LeadForm'
+import { NotificationsBell } from './NotificationsBell'
 import { Lead } from '@/types'
 import pb from '@/lib/pocketbase/client'
 
@@ -64,19 +65,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground rounded-full"
-          onClick={() =>
-            toast({
-              title: 'Funcionalidade em breve',
-              description: 'Notificações estarão disponíveis em breve.',
-            })
-          }
-        >
-          <Bell className="size-5" />
-        </Button>
+        <NotificationsBell />
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
