@@ -1,5 +1,6 @@
 import { Lead } from '@/types'
 import { Link, useNavigate } from 'react-router-dom'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -30,9 +31,21 @@ interface LeadsListProps {
   page: number
   totalPages: number
   onPageChange: (p: number) => void
+  selectedLeads?: string[]
+  onToggleSelect?: (id: string) => void
+  onToggleSelectAll?: () => void
 }
 
-export function LeadsList({ leads, isLoading, page, totalPages, onPageChange }: LeadsListProps) {
+export function LeadsList({
+  leads,
+  isLoading,
+  page,
+  totalPages,
+  onPageChange,
+  selectedLeads = [],
+  onToggleSelect,
+  onToggleSelectAll,
+}: LeadsListProps) {
   const navigate = useNavigate()
 
   if (isLoading) {
@@ -60,6 +73,15 @@ export function LeadsList({ leads, isLoading, page, totalPages, onPageChange }: 
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
+              {onToggleSelectAll && (
+                <TableHead className="w-[40px] px-4">
+                  <Checkbox
+                    checked={leads.length > 0 && leads.every((l) => selectedLeads.includes(l.id))}
+                    onCheckedChange={onToggleSelectAll}
+                    aria-label="Select all"
+                  />
+                </TableHead>
+              )}
               <TableHead>Nome</TableHead>
               <TableHead>Contato</TableHead>
               <TableHead>Status</TableHead>
@@ -71,7 +93,20 @@ export function LeadsList({ leads, isLoading, page, totalPages, onPageChange }: 
           </TableHeader>
           <TableBody>
             {leads.map((lead) => (
-              <TableRow key={lead.id} className="group hover:bg-slate-50/80 transition-colors">
+              <TableRow
+                key={lead.id}
+                className="group hover:bg-slate-50/80 transition-colors"
+                data-state={selectedLeads.includes(lead.id) ? 'selected' : undefined}
+              >
+                {onToggleSelect && (
+                  <TableCell className="w-[40px] px-4">
+                    <Checkbox
+                      checked={selectedLeads.includes(lead.id)}
+                      onCheckedChange={() => onToggleSelect(lead.id)}
+                      aria-label={`Select ${lead.nome}`}
+                    />
+                  </TableCell>
+                )}
                 <TableCell>
                   <Link
                     to={`/leads/${lead.id}`}

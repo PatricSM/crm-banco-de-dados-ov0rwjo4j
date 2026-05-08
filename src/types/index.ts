@@ -33,6 +33,8 @@ export interface Lead {
   tentativas_contato?: number
   data_proximo_contato?: string
   objecoes?: string
+  arquivado?: boolean
+  arquivado_em?: string
   created: string
   updated: string
   expand?: {

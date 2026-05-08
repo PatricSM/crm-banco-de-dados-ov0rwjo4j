@@ -8,6 +8,7 @@ export interface LeadsFilters {
   origem?: string
   colaboradorId?: string
   search?: string
+  showArchived?: boolean
 }
 
 const buildFilterString = (filters?: LeadsFilters) => {
@@ -22,7 +23,9 @@ const buildFilterString = (filters?: LeadsFilters) => {
     const s = filters.search.replace(/"/g, '\\"')
     filterParts.push(`(nome ~ "${s}" || email ~ "${s}" || telefone ~ "${s}")`)
   }
-  return filterParts.join(' && ')
+  if (!filters?.showArchived) filterParts.push(`arquivado != true`)
+
+  return filterParts.length > 0 ? filterParts.join(' && ') : ''
 }
 
 export const getLeads = async (filters?: LeadsFilters) => {
