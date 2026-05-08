@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, UserCog, Sparkles, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, UserCog, Sparkles, LogOut, Calendar } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -52,6 +52,19 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
             >
               <LayoutDashboard className="size-4" />
               Dashboard
+            </Link>
+            <Link
+              to="/agenda"
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors',
+                pathname.startsWith('/agenda')
+                  ? 'bg-primary text-primary-foreground font-medium shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <Calendar className="size-4" />
+              Agenda
             </Link>
             <Link
               to="/leads"

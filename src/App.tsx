@@ -10,6 +10,7 @@ import Index from './pages/Index'
 import Leads from './pages/Leads'
 import LeadDetails from './pages/LeadDetails'
 import Users from './pages/Users'
+import Agenda from './pages/Agenda'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -25,6 +26,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/leads/:id" element={<LeadDetails />} />
+            <Route path="/agenda" element={<Agenda />} />
             <Route path="/usuarios" element={<Users />} />
           </Route>
 

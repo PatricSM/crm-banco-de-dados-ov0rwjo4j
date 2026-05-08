@@ -51,6 +51,23 @@ export interface Historico {
   }
 }
 
+export interface Agendamento {
+  id: string
+  lead_id: string
+  profissional_id: string
+  data_inicio: string
+  data_fim?: string
+  procedimento?: string
+  status: 'Agendado' | 'Confirmado' | 'Compareceu' | 'No-show' | 'Cancelado'
+  observacoes?: string
+  created: string
+  updated: string
+  expand?: {
+    lead_id?: Lead
+    profissional_id?: User
+  }
+}
+
 export interface Orcamento {
   id: string
   lead_id: string

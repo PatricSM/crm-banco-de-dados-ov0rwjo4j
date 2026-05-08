@@ -14,6 +14,7 @@ import { leadStatusToTone } from '@/lib/leadStatus'
 import { LeadForm } from '@/components/LeadForm'
 import { LeadHistory } from '@/components/LeadHistory'
 import { OrcamentosList } from '@/components/OrcamentosList'
+import { LeadAgendamentosList } from '@/components/agendamentos/LeadAgendamentosList'
 import { StatusChip } from '@/components/StatusChip'
 import { PageHeader } from '@/components/PageHeader'
 
@@ -365,9 +366,14 @@ export default function LeadDetails() {
           <LeadHistory leadId={lead.id} history={historico} />
         </div>
 
-        {/* Right Column: Budgets */}
-        <div className="lg:col-span-1 bg-white border rounded-2xl p-6 shadow-subtle h-[calc(100vh-280px)] min-h-[500px]">
-          <OrcamentosList leadId={lead.id} orcamentos={orcamentos} />
+        {/* Right Column: Budgets and Agendamentos */}
+        <div className="lg:col-span-1 flex flex-col gap-6 h-[calc(100vh-280px)] min-h-[500px]">
+          <div className="bg-white border rounded-2xl p-6 shadow-subtle flex-1 overflow-y-auto">
+            <LeadAgendamentosList leadId={lead.id} />
+          </div>
+          <div className="bg-white border rounded-2xl p-6 shadow-subtle flex-1 overflow-y-auto">
+            <OrcamentosList leadId={lead.id} orcamentos={orcamentos} />
+          </div>
         </div>
       </div>
 
