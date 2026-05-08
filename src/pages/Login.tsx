@@ -143,18 +143,6 @@ export default function Login() {
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">ou continue com</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" type="button" onClick={handleComingSoon} className="w-full">
-              Google
-            </Button>
-            <Button variant="outline" type="button" onClick={handleComingSoon} className="w-full">
-              Microsoft
-            </Button>
           </div>
 
           <div className="text-center text-xs text-muted-foreground lg:hidden">
