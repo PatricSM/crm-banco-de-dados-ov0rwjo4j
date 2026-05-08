@@ -15,6 +15,7 @@ import { LeadForm } from '@/components/LeadForm'
 import { LeadHistory } from '@/components/LeadHistory'
 import { OrcamentosList } from '@/components/OrcamentosList'
 import { LeadAgendamentosList } from '@/components/agendamentos/LeadAgendamentosList'
+import { LeadAttachmentsGallery } from '@/components/leads/LeadAttachmentsGallery'
 import { StatusChip } from '@/components/StatusChip'
 import { PageHeader } from '@/components/PageHeader'
 
@@ -376,6 +377,8 @@ export default function LeadDetails() {
           </div>
         </div>
       </div>
+
+      <LeadAttachmentsGallery leadId={lead.id} leadStatus={lead.status} />
 
       {/* Fixed Bottom CTA Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200 p-4 z-40 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.05)]">

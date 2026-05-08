@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-08T18:55:46.293Z",
+  "generatedAt": "2026-05-08T19:04:54.752Z",
   "collections": [
     {
       "name": "users",
@@ -461,6 +461,90 @@
       ],
       "indexes": [
         "CREATE INDEX idx_notifications_recipient_read ON notifications (recipient, read_at)"
+      ]
+    },
+    {
+      "name": "lead_attachments",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.role = 'gestor' || lead_id.colaborador_id = @request.auth.id",
+        "view": "@request.auth.role = 'gestor' || lead_id.colaborador_id = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.role = 'gestor' || uploaded_by = @request.auth.id",
+        "delete": "@request.auth.role = 'gestor' || uploaded_by = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "lead_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "leads"
+        },
+        {
+          "name": "file",
+          "type": "file",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "original_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "kind",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "foto_antes",
+            "foto_depois",
+            "documento",
+            "contrato",
+            "exame",
+            "comprovante",
+            "outro"
+          ]
+        },
+        {
+          "name": "size",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "uploaded_by",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_lead_attachments_lead ON lead_attachments (lead_id)",
+        "CREATE INDEX idx_lead_attachments_created ON lead_attachments (created)"
       ]
     }
   ]

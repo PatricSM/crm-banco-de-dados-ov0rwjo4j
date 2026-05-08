@@ -20,6 +20,12 @@ import { MoreVertical, Phone, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useDragScroll } from '@/hooks/use-drag-scroll'
 import { cn } from '@/lib/utils'
+import { Paperclip, Loader2 } from 'lucide-react'
+import { useLeadAttachmentsCount } from '@/hooks/use-lead-attachments-count'
+import { uploadAttachment } from '@/services/lead-attachments'
+import { useAuth } from '@/hooks/use-auth'
+import { toast } from '@/hooks/use-toast'
+import { AttachmentKind } from '@/types'
 
 interface LeadsKanbanProps {
   leads: Lead[]
@@ -37,6 +43,9 @@ const COLUMNS: { label: string; statuses: LeadStatus[]; color: string }[] = [
 
 export function LeadsKanban({ leads, isLoading, onStatusChange }: LeadsKanbanProps) {
   const { containerRef, events, isDragging: isScrollDragging } = useDragScroll()
+  const attachmentCounts = useLeadAttachmentsCount()
+  const { user } = useAuth()
+  const [uploadingTo, setUploadingTo] = useState<string | null>(null)
 
   const [draggingLead, setDraggingLead] = useState<Lead | null>(null)
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
@@ -170,7 +179,57 @@ export function LeadsKanban({ leads, isLoading, onStatusChange }: LeadsKanbanPro
     }
   }, [onStatusChange])
 
+  const handleFileDrop = async (e: React.DragEvent<HTMLDivElement>, lead: Lead) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const files = Array.from(e.dataTransfer.files)
+    if (!files.length || !user?.id) return
+
+    setUploadingTo(lead.id)
+    try {
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append('lead_id', lead.id)
+        formData.append('file', file)
+        formData.append('original_name', file.name)
+        formData.append('size', file.size.toString())
+        formData.append('uploaded_by', user.id)
+
+        let kind: AttachmentKind = 'documento'
+        if (lead.status === 'Em Atendimento' || lead.status === 'Compareceu') kind = 'foto_depois'
+        else if (lead.status === 'Convertido' || lead.status === 'Vendido') kind = 'comprovante'
+        else if (file.type.startsWith('image/')) kind = 'foto_antes'
+
+        formData.append('kind', kind)
+        await uploadAttachment(formData)
+      }
+      toast({ title: 'Anexos enviados com sucesso!' })
+    } catch (err: any) {
+      toast({ title: 'Erro ao anexar', description: err.message, variant: 'destructive' })
+    } finally {
+      setUploadingTo(null)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer.types.includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy'
+      e.currentTarget.classList.add('border-primary', 'bg-primary/5')
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.classList.remove('border-primary', 'bg-primary/5')
+  }
+
   const renderCard = (lead: Lead, isOverlay = false) => {
+    const attachCount = attachmentCounts[lead.id] || 0
+    const isUploading = uploadingTo === lead.id
+
     return (
       <div
         className={cn(
@@ -185,7 +244,16 @@ export function LeadsKanban({ leads, isLoading, onStatusChange }: LeadsKanbanPro
         onContextMenu={(e) => {
           if (!isOverlay) e.preventDefault()
         }}
+        onDrop={!isOverlay ? (e) => handleFileDrop(e, lead) : undefined}
+        onDragOver={!isOverlay ? handleDragOver : undefined}
+        onDragLeave={!isOverlay ? handleDragLeave : undefined}
       >
+        {isUploading && (
+          <div className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary mb-2" />
+            <span className="text-xs font-medium text-primary">Enviando...</span>
+          </div>
+        )}
         <div className="flex justify-between items-start mb-2">
           <Link
             to={`/leads/${lead.id}`}
@@ -242,6 +310,12 @@ export function LeadsKanban({ leads, isLoading, onStatusChange }: LeadsKanbanPro
             className="scale-90 origin-left"
           />
           <div className="flex items-center gap-1.5">
+            {attachCount > 0 && (
+              <div className="flex items-center gap-1 text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded text-xs font-medium border border-slate-100">
+                <Paperclip className="w-3 h-3" />
+                <span>{attachCount}</span>
+              </div>
+            )}
             {lead.valor_orcamento && (
               <span className="text-xs font-medium text-slate-700 tabular-nums">
                 R$ {lead.valor_orcamento.toLocaleString('pt-BR')}

@@ -42,11 +42,13 @@ import {
   Wallet,
   Target,
   Activity,
+  Paperclip,
 } from 'lucide-react'
 
 import { useRealtime } from '@/hooks/use-realtime'
 import { getLeads } from '@/services/leads'
 import { getAllOrcamentos } from '@/services/orcamentos'
+import { getMonthlyAttachmentsCount } from '@/services/lead-attachments'
 import { Lead, Orcamento } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -67,14 +69,24 @@ const funnelColors: Record<string, string> = {
 export default function Index() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
+  const [attachmentsCount, setAttachmentsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [timeframe, setTimeframe] = useState<Timeframe>('monthly')
 
   const loadData = async () => {
     try {
-      const [fetchedLeads, fetchedOrcamentos] = await Promise.all([getLeads(), getAllOrcamentos()])
+      const now = new Date()
+      let currStart = startOfMonth(now).toISOString()
+      let currEnd = endOfMonth(now).toISOString()
+
+      const [fetchedLeads, fetchedOrcamentos, attCount] = await Promise.all([
+        getLeads(),
+        getAllOrcamentos(),
+        getMonthlyAttachmentsCount(currStart, currEnd),
+      ])
       setLeads(fetchedLeads)
       setOrcamentos(fetchedOrcamentos)
+      setAttachmentsCount(attCount)
     } catch (err) {
       console.error(err)
     } finally {
@@ -90,6 +102,9 @@ export default function Index() {
     loadData()
   })
   useRealtime('orcamentos', () => {
+    loadData()
+  })
+  useRealtime('lead_attachments', () => {
     loadData()
   })
 
@@ -269,7 +284,7 @@ export default function Index() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
         <KpiCard
           title="Leads Ativos"
           value={data.activeLeadsCount.toString()}
@@ -293,6 +308,12 @@ export default function Index() {
           title="Receita Pipeline"
           value={formatCurrency(data.pipelineRevenueValue)}
           icon={Wallet}
+          loading={loading}
+        />
+        <KpiCard
+          title="Anexos no mês"
+          value={attachmentsCount.toString()}
+          icon={Paperclip}
           loading={loading}
         />
       </div>

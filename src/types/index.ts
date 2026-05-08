@@ -18,6 +18,32 @@ export type LeadStatus =
   | 'Compareceu'
   | 'Vendido'
 
+export type AttachmentKind =
+  | 'foto_antes'
+  | 'foto_depois'
+  | 'documento'
+  | 'contrato'
+  | 'exame'
+  | 'comprovante'
+  | 'outro'
+
+export interface LeadAttachment {
+  id: string
+  lead_id: string
+  file: string
+  original_name: string
+  kind: AttachmentKind
+  size?: number
+  uploaded_by: string
+  description?: string
+  created: string
+  updated: string
+  expand?: {
+    uploaded_by?: User
+    lead_id?: Lead
+  }
+}
+
 export interface Lead {
   id: string
   nome: string

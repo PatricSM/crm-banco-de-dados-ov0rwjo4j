@@ -24,6 +24,8 @@ import { EmptyState } from '@/components/EmptyState'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Paperclip } from 'lucide-react'
+import { useLeadAttachmentsCount } from '@/hooks/use-lead-attachments-count'
 
 interface LeadsListProps {
   leads: Lead[]
@@ -47,6 +49,7 @@ export function LeadsList({
   onToggleSelectAll,
 }: LeadsListProps) {
   const navigate = useNavigate()
+  const attachmentCounts = useLeadAttachmentsCount()
 
   if (isLoading) {
     return (
@@ -108,12 +111,19 @@ export function LeadsList({
                   </TableCell>
                 )}
                 <TableCell>
-                  <Link
-                    to={`/leads/${lead.id}`}
-                    className="font-medium text-slate-900 hover:text-primary hover:underline"
-                  >
-                    {lead.nome}
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/leads/${lead.id}`}
+                      className="font-medium text-slate-900 hover:text-primary hover:underline"
+                    >
+                      {lead.nome}
+                    </Link>
+                    {(attachmentCounts[lead.id] || 0) > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-sm border border-slate-200">
+                        <Paperclip className="w-3 h-3" /> {attachmentCounts[lead.id]}
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
