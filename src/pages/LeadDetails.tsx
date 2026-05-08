@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Lead } from '@/types'
-import { getLead, createLead, updateLead } from '@/services/leads'
+import { getLead, createLead, updateLead, deleteLead } from '@/services/leads'
 import { LeadForm } from '@/components/LeadForm'
 import { LeadHistory } from '@/components/LeadHistory'
+import { OrcamentosList } from '@/components/OrcamentosList'
 import { createHistorico } from '@/services/historico'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -21,9 +22,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { deleteLead } from '@/services/leads'
 
-const STATUSES = ['Novo', 'Em Atendimento', 'Agendado', 'Compareceu', 'Vendido', 'Perdido']
+const STATUSES = ['Novo Contato', 'Agendado', 'Em Atendimento', 'Convertido', 'Perdido']
 
 export default function LeadDetails() {
   const { id } = useParams()
@@ -80,9 +80,9 @@ export default function LeadDetails() {
         await createHistorico({
           lead_id: id!,
           acao: 'Edição',
-          detalhes: 'Informações base do lead foram editadas.',
+          detalhes: 'Informações do lead foram atualizadas.',
         })
-        toast({ title: 'Lead Atualizado', description: 'O lead foi salvo com sucesso.' })
+        toast({ title: 'Lead Atualizado', description: 'As informações foram salvas com sucesso.' })
         loadLead()
       }
     } catch (e: any) {
@@ -109,27 +109,23 @@ export default function LeadDetails() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto w-full space-y-6 pb-12 animate-fade-in">
+      <div className="max-w-[1400px] mx-auto w-full space-y-6 pb-12 animate-fade-in">
         <Skeleton className="h-10 w-32" />
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-4 w-40" />
-        </div>
         <Skeleton className="h-20 w-full rounded-xl" />
-        <div className="grid md:grid-cols-2 gap-6">
-          <Skeleton className="h-[400px] w-full rounded-xl" />
-          <Skeleton className="h-[400px] w-full rounded-xl" />
+        <div className="grid lg:grid-cols-5 gap-6">
+          <Skeleton className="lg:col-span-3 h-[400px] w-full rounded-xl" />
+          <Skeleton className="lg:col-span-2 h-[400px] w-full rounded-xl" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full space-y-6 pb-12 animate-fade-in">
+    <div className="max-w-[1400px] mx-auto w-full space-y-6 pb-12 animate-fade-in">
       <Button
         variant="ghost"
         onClick={() => navigate('/leads')}
-        className="text-muted-foreground hover:text-foreground hover:bg-slate-100 transition-colors"
+        className="text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
       </Button>
@@ -152,7 +148,7 @@ export default function LeadDetails() {
               <Button
                 variant="destructive"
                 size="sm"
-                className="hover:scale-105 transition-transform"
+                className="hover:scale-105 transition-transform shadow-sm"
               >
                 <Trash2 className="w-4 h-4 mr-2" /> Excluir Lead
               </Button>
@@ -161,8 +157,8 @@ export default function LeadDetails() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Essa ação não pode ser desfeita. Isso excluirá permanentemente o lead "
-                  {lead?.nome}" e todo o seu histórico de interações.
+                  Essa ação não pode ser desfeita. Excluirá permanentemente o lead "{lead?.nome}" e
+                  seu histórico.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -188,7 +184,7 @@ export default function LeadDetails() {
               <div key={s} className="flex items-center shrink-0">
                 <button
                   onClick={() => handleStatusChange(s)}
-                  className={`h-9 px-5 rounded-full flex items-center justify-center text-sm font-medium border transition-all hover:scale-105 active:scale-95 ${isActive ? 'bg-primary text-primary-foreground border-primary shadow-md' : isPast ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20' : 'bg-slate-50 text-muted-foreground hover:bg-slate-100'}`}
+                  className={`h-9 px-5 rounded-full flex items-center justify-center text-sm font-medium border transition-all hover:scale-105 ${isActive ? 'bg-primary text-primary-foreground border-primary shadow-md' : isPast ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20' : 'bg-slate-50 text-muted-foreground hover:bg-slate-100'}`}
                 >
                   {isPast && <CheckCircle2 className="w-4 h-4 mr-2 opacity-80" />}
                   {s}
@@ -204,14 +200,22 @@ export default function LeadDetails() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6 items-start">
-        <div className="bg-white border rounded-xl p-6 shadow-subtle">
-          <h2 className="text-xl font-semibold mb-6 text-slate-800">Ficha do Lead</h2>
-          <LeadForm lead={lead || undefined} onSave={handleSave} />
+      <div className="grid lg:grid-cols-5 gap-6 items-start">
+        <div className="lg:col-span-3 space-y-6">
+          <div className="bg-white border rounded-xl p-6 shadow-subtle">
+            <h2 className="text-xl font-semibold mb-6 text-slate-800">Ficha do Lead</h2>
+            <LeadForm lead={lead || undefined} onSave={handleSave} />
+          </div>
+
+          {id !== 'novo' && (
+            <div className="bg-white border rounded-xl p-6 shadow-subtle">
+              <OrcamentosList leadId={id!} />
+            </div>
+          )}
         </div>
 
         {id !== 'novo' && lead && (
-          <div className="bg-white border rounded-xl p-6 shadow-subtle sticky top-20">
+          <div className="lg:col-span-2 bg-white border rounded-xl p-6 shadow-subtle sticky top-20">
             <h2 className="text-xl font-semibold mb-6 text-slate-800">Timeline de Interações</h2>
             <LeadHistory leadId={lead.id} />
           </div>

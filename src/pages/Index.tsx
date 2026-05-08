@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getLeads, LeadsFilters } from '@/services/leads'
+import { getAllOrcamentos } from '@/services/orcamentos'
 import { getUsers } from '@/services/users'
-import { Lead, User } from '@/types'
+import { Lead, User, Orcamento } from '@/types'
 import { Bar, BarChart, XAxis, YAxis, PieChart, Pie, Cell, Legend } from 'recharts'
 import { format, subDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -12,8 +13,7 @@ import {
   Users,
   DollarSign,
   Calendar as CalendarIcon,
-  CheckCircle,
-  XCircle,
+  Target,
   TrendingUp,
   Trophy,
 } from 'lucide-react'
@@ -36,6 +36,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 export default function Dashboard() {
   const { user } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
+  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
   const [usersList, setUsersList] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -44,11 +45,11 @@ export default function Dashboard() {
     to: new Date(),
   })
   const [status, setStatus] = useState<string>('all')
-  const [origem, setOrigem] = useState<string>('all')
   const [colaboradorId, setColaboradorId] = useState<string>('all')
 
   useEffect(() => {
     getUsers().then(setUsersList)
+    getAllOrcamentos().then(setOrcamentos)
   }, [])
 
   useEffect(() => {
@@ -57,48 +58,48 @@ export default function Dashboard() {
       dateFrom: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
       dateTo: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
       status,
-      origem,
       colaboradorId,
     }
     getLeads(filters).then((data) => {
       setLeads(data)
       setLoading(false)
     })
-  }, [date, status, origem, colaboradorId])
+  }, [date, status, colaboradorId])
 
   const totalLeads = leads.length
-  const agendados = leads.filter((l) => l.status === 'Agendado').length
-  const comparecimentos = leads.filter((l) => l.status === 'Compareceu').length
-  const fechamentos = leads.filter((l) => l.status === 'Vendido').length
-  const faltas = leads.filter((l) => l.status === 'Perdido').length
+  const convertidos = leads.filter((l) => l.status === 'Convertido').length
 
-  const vendas = leads.filter((l) => l.status === 'Vendido')
-  const ticketMedio = vendas.length
-    ? vendas.reduce((acc, l) => acc + (l.valor_orcamento || 0), 0) / vendas.length
-    : 0
+  const orcamentosFiltrados = useMemo(() => {
+    return orcamentos.filter((o) => {
+      if (!date?.from || !date?.to) return true
+      const d = new Date(o.created)
+      return d >= date.from && d <= date.to
+    })
+  }, [orcamentos, date])
 
-  const taxaConversao = totalLeads ? (fechamentos / totalLeads) * 100 : 0
+  const orcamentosAprovados = orcamentosFiltrados.filter((o) => o.status === 'Aprovado')
+  const faturamento = orcamentosAprovados.reduce((acc, o) => acc + o.valor_total, 0)
+  const ticketMedio = orcamentosAprovados.length ? faturamento / orcamentosAprovados.length : 0
+  const taxaConversao = totalLeads ? (convertidos / totalLeads) * 100 : 0
 
   const monthlyData = useMemo(() => {
     const map = leads.reduce(
       (acc, lead) => {
         const dateObj = parseISO(lead.created)
         const month = format(dateObj, 'MMM/yy', { locale: ptBR })
-        if (!acc[month]) {
+        if (!acc[month])
           acc[month] = {
             name: month,
             leads: 0,
-            fechamentos: 0,
+            convertidos: 0,
             sortKey: format(dateObj, 'yyyy-MM'),
           }
-        }
         acc[month].leads += 1
-        if (lead.status === 'Vendido') acc[month].fechamentos += 1
+        if (lead.status === 'Convertido') acc[month].convertidos += 1
         return acc
       },
-      {} as Record<string, { name: string; leads: number; fechamentos: number; sortKey: string }>,
+      {} as Record<string, any>,
     )
-
     return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
   }, [leads])
 
@@ -120,7 +121,6 @@ export default function Dashboard() {
       'hsl(var(--chart-4))',
       'hsl(var(--chart-5))',
     ]
-
     return Object.entries(map).map(([name, value], i) => ({
       name,
       value,
@@ -140,42 +140,38 @@ export default function Dashboard() {
 
   const ranking = useMemo(() => {
     const map: Record<string, { id: string; name: string; points: number; avatar: string }> = {}
-
     usersList.forEach((u) => {
       map[u.id] = { id: u.id, name: u.name || u.email, avatar: u.avatar, points: 0 }
     })
 
-    leads.forEach((l) => {
-      if (l.status === 'Vendido') {
-        const colabId = l.colaborador_id || l.expand?.colaborador_id?.id
-        if (colabId && map[colabId]) {
-          map[colabId].points += 1
-        }
+    orcamentosAprovados.forEach((o) => {
+      const colabId =
+        o.expand?.lead_id?.colaborador_id || leads.find((l) => l.id === o.lead_id)?.colaborador_id
+      if (colabId && map[colabId as string]) {
+        map[colabId as string].points += 1
       }
     })
 
     return Object.values(map).sort((a, b) => b.points - a.points)
-  }, [leads, usersList])
+  }, [orcamentosAprovados, usersList, leads])
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-          Dashboard Comercial
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard Comercial</h1>
         <p className="text-muted-foreground mt-1">
-          Acompanhe as métricas principais do seu pipeline de vendas e análise de performance.
+          Acompanhe as métricas e o volume do seu funil de vendas baseado nos Orçamentos Aprovados.
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center bg-white dark:bg-slate-900 p-4 rounded-lg shadow-subtle border border-slate-100 dark:border-slate-800">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center bg-white p-4 rounded-lg shadow-subtle border border-slate-100">
         <Popover>
           <PopoverTrigger asChild>
             <Button
               id="date"
               variant="outline"
               className={cn(
-                'w-[300px] justify-start text-left font-normal bg-white dark:bg-slate-900',
+                'w-[300px] justify-start text-left font-normal bg-white',
                 !date && 'text-muted-foreground',
               )}
             >
@@ -205,34 +201,6 @@ export default function Dashboard() {
           </PopoverContent>
         </Popover>
 
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[180px] bg-white">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os Status</SelectItem>
-            <SelectItem value="Novo">Novo</SelectItem>
-            <SelectItem value="Em Atendimento">Em Atendimento</SelectItem>
-            <SelectItem value="Agendado">Agendado</SelectItem>
-            <SelectItem value="Compareceu">Compareceu</SelectItem>
-            <SelectItem value="Vendido">Vendido</SelectItem>
-            <SelectItem value="Perdido">Perdido</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={origem} onValueChange={setOrigem}>
-          <SelectTrigger className="w-[180px] bg-white">
-            <SelectValue placeholder="Origem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as Origens</SelectItem>
-            <SelectItem value="Indicação">Indicação</SelectItem>
-            <SelectItem value="Campanha">Campanha</SelectItem>
-            <SelectItem value="Parceria">Parceria</SelectItem>
-            <SelectItem value="Tráfego Pago">Tráfego Pago</SelectItem>
-          </SelectContent>
-        </Select>
-
         {user?.role === 'gestor' && (
           <Select value={colaboradorId} onValueChange={setColaboradorId}>
             <SelectTrigger className="w-[180px] bg-white">
@@ -252,14 +220,8 @@ export default function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {loading ? (
-          Array.from({ length: 7 }).map((_, i) => (
-            <Card
-              key={i}
-              className={cn(
-                'border-none shadow-subtle bg-white dark:bg-slate-900',
-                i === 6 ? 'lg:col-span-2' : '',
-              )}
-            >
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="border-none shadow-subtle bg-white">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 w-4 rounded-full" />
@@ -271,63 +233,45 @@ export default function Dashboard() {
           ))
         ) : (
           <>
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300">
+            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium text-slate-600">Total de Leads</CardTitle>
+                <div className="p-2 bg-slate-50 rounded-full group-hover:bg-primary/10 transition-colors">
+                  <Users className="h-4 w-4 text-slate-500 group-hover:text-primary" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{totalLeads}</div>
+                <div className="text-3xl font-bold text-slate-900">{totalLeads}</div>
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300">
+            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Agendamentos</CardTitle>
-                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium text-slate-600">
+                  Faturamento Aprovado
+                </CardTitle>
+                <div className="p-2 bg-emerald-50 rounded-full group-hover:bg-emerald-100 transition-colors">
+                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{agendados}</div>
+                <div className="text-3xl font-bold text-emerald-600">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                    faturamento,
+                  )}
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300">
+            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Comparecimentos</CardTitle>
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium text-slate-600">Ticket Médio</CardTitle>
+                <div className="p-2 bg-blue-50 rounded-full group-hover:bg-blue-100 transition-colors">
+                  <Target className="h-4 w-4 text-blue-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{comparecimentos}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Fechamentos</CardTitle>
-                <TrendingUp className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-primary">{fechamentos}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Faltas</CardTitle>
-                <XCircle className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">{faltas}</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300 lg:col-span-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-3xl font-bold text-slate-900">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
                     ticketMedio,
                   )}
@@ -335,13 +279,17 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 hover:-translate-y-1 transition-transform duration-300">
+            <Card className="border-none shadow-subtle bg-white hover:-translate-y-1 transition-transform duration-300 group">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium text-slate-600">
+                  Taxa de Conversão
+                </CardTitle>
+                <div className="p-2 bg-amber-50 rounded-full group-hover:bg-amber-100 transition-colors">
+                  <Activity className="h-4 w-4 text-amber-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{taxaConversao.toFixed(1)}%</div>
+                <div className="text-3xl font-bold text-slate-900">{taxaConversao.toFixed(1)}%</div>
               </CardContent>
             </Card>
           </>
@@ -349,9 +297,9 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
-        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 col-span-1 md:col-span-2">
+        <Card className="border-none shadow-subtle bg-white col-span-1 md:col-span-2">
           <CardHeader>
-            <CardTitle>Performance Mensal (Leads vs Vendas)</CardTitle>
+            <CardTitle>Performance Mensal</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -360,7 +308,7 @@ export default function Dashboard() {
               <ChartContainer
                 config={{
                   leads: { label: 'Leads', color: 'hsl(var(--primary))' },
-                  fechamentos: { label: 'Fechamentos', color: 'hsl(var(--chart-2))' },
+                  convertidos: { label: 'Convertidos', color: 'hsl(var(--chart-2))' },
                 }}
                 className="h-[320px] w-full"
               >
@@ -375,8 +323,8 @@ export default function Dashboard() {
                     maxBarSize={40}
                   />
                   <Bar
-                    dataKey="fechamentos"
-                    fill="var(--color-fechamentos)"
+                    dataKey="convertidos"
+                    fill="var(--color-convertidos)"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={40}
                   />
@@ -386,9 +334,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900 col-span-1">
+        <Card className="border-none shadow-subtle bg-white col-span-1">
           <CardHeader>
-            <CardTitle>Distribuição por Origem</CardTitle>
+            <CardTitle>Origem dos Leads</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -420,11 +368,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 grid-cols-1">
-        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
+        <Card className="border-none shadow-subtle bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xl flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-amber-500" />
-              Ranking de Performance
+              <Trophy className="w-5 h-5 text-amber-500" /> Ranking de Gestão (Orçamentos Aprovados)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -432,14 +379,13 @@ export default function Dashboard() {
               <div className="space-y-4 mt-4">
                 <Skeleton className="h-16 w-full rounded-xl" />
                 <Skeleton className="h-16 w-full rounded-xl" />
-                <Skeleton className="h-16 w-full rounded-xl" />
               </div>
             ) : (
-              <div className="space-y-3 mt-4">
+              <div className="space-y-3 mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {ranking.map((u, idx) => (
                   <div
                     key={u.id}
-                    className="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 transition-colors border bg-white shadow-sm hover:scale-[1.01]"
+                    className="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 transition-colors border shadow-sm hover:scale-[1.02]"
                   >
                     <div className="flex items-center gap-4">
                       <div
@@ -468,15 +414,15 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-bold text-primary">{u.points}</p>
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                        {u.points === 1 ? 'Venda' : 'Vendas'}
+                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                        Aprovações
                       </p>
                     </div>
                   </div>
                 ))}
                 {ranking.length === 0 && (
-                  <div className="text-center py-10 text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
-                    Nenhuma venda registrada neste período.
+                  <div className="md:col-span-3 text-center py-10 text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
+                    Nenhuma aprovação registrada neste período.
                   </div>
                 )}
               </div>

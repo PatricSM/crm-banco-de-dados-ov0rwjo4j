@@ -9,12 +9,14 @@ export interface User {
 }
 
 export type LeadStatus =
-  | 'Novo'
-  | 'Em Atendimento'
+  | 'Novo Contato'
   | 'Agendado'
+  | 'Em Atendimento'
+  | 'Convertido'
+  | 'Perdido'
+  | 'Novo'
   | 'Compareceu'
   | 'Vendido'
-  | 'Perdido'
 
 export interface Lead {
   id: string
@@ -25,6 +27,12 @@ export interface Lead {
   valor_orcamento: number
   data_agendamento: string
   data_comparecimento: string
+  telefone?: string
+  email?: string
+  procedimento_interesse?: string
+  tentativas_contato?: number
+  data_proximo_contato?: string
+  objecoes?: string
   created: string
   updated: string
   expand?: {
@@ -38,6 +46,22 @@ export interface Historico {
   acao: string
   detalhes: string
   created: string
+  expand?: {
+    lead_id?: Lead
+  }
+}
+
+export interface Orcamento {
+  id: string
+  lead_id: string
+  procedimentos: string
+  valor_total: number
+  validade: string
+  forma_pagamento: string
+  desconto_aplicado: number
+  status: 'Pendente' | 'Aprovado' | 'Cancelado'
+  created: string
+  updated: string
   expand?: {
     lead_id?: Lead
   }
