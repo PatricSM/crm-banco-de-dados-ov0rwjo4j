@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, MouseEvent as ReactMouseEvent } from 'react'
+import { useRef, useState, useCallback, PointerEvent as ReactPointerEvent } from 'react'
 
 export function useDragScroll() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -6,15 +6,17 @@ export function useDragScroll() {
   const [startX, setStartX] = useState(0)
   const [scrollLeft, setScrollLeft] = useState(0)
 
-  const onMouseDown = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
-    // Ignore if clicked on an interactive element
+  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return // Let native touch scrolling happen seamlessly
+
     const target = e.target as HTMLElement
     const isInteractive =
       target.closest('button') ||
       target.closest('a') ||
       target.closest('input') ||
       target.closest('[role="menuitem"]') ||
-      target.closest('[role="dialog"]')
+      target.closest('[role="dialog"]') ||
+      target.closest('.kanban-card') // Ignore kanban cards so they can be dragged
 
     if (isInteractive) return
 
@@ -22,19 +24,21 @@ export function useDragScroll() {
     if (containerRef.current) {
       setStartX(e.pageX - containerRef.current.offsetLeft)
       setScrollLeft(containerRef.current.scrollLeft)
+      containerRef.current.setPointerCapture(e.pointerId)
     }
   }, [])
 
-  const onMouseLeave = useCallback(() => {
+  const onPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return
     setIsDragging(false)
+    if (containerRef.current && containerRef.current.hasPointerCapture(e.pointerId)) {
+      containerRef.current.releasePointerCapture(e.pointerId)
+    }
   }, [])
 
-  const onMouseUp = useCallback(() => {
-    setIsDragging(false)
-  }, [])
-
-  const onMouseMove = useCallback(
-    (e: ReactMouseEvent<HTMLDivElement>) => {
+  const onPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerType === 'touch') return
       if (!isDragging || !containerRef.current) return
 
       e.preventDefault()
@@ -48,10 +52,10 @@ export function useDragScroll() {
   return {
     containerRef,
     events: {
-      onMouseDown,
-      onMouseLeave,
-      onMouseUp,
-      onMouseMove,
+      onPointerDown,
+      onPointerUp,
+      onPointerMove,
+      onPointerCancel: onPointerUp,
     },
     isDragging,
   }
