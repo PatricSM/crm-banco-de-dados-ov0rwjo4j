@@ -5,6 +5,14 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface AppSidebarProps {
   className?: string
@@ -87,11 +95,23 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
 
       <div className="p-4 border-t shrink-0">
         <div className="flex items-center gap-3 bg-muted/50 p-3 rounded-xl border border-border/50">
-          <Avatar className="size-9 border border-primary/10 bg-background">
-            <AvatarFallback className="bg-primary/5 text-primary text-sm font-semibold">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </AvatarFallback>
-          </Avatar>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Avatar className="size-9 border border-primary/10 bg-background cursor-pointer hover:opacity-80 transition-opacity">
+                <AvatarFallback className="bg-primary/5 text-primary text-sm font-semibold">
+                  {user?.name?.charAt(0).toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => signOut()}>
+                <LogOut className="mr-2 size-4" />
+                <span>Sair</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate text-foreground">
               {user?.name || user?.email}

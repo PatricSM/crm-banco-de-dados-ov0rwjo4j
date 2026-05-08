@@ -70,7 +70,7 @@ export function TopBar() {
           className="text-muted-foreground rounded-full"
           onClick={() =>
             toast({
-              title: 'Feature coming soon',
+              title: 'Funcionalidade em breve',
               description: 'Notificações estarão disponíveis em breve.',
             })
           }
