@@ -1,97 +1,320 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getLeads } from '@/services/leads'
-import { getRecentHistorico } from '@/services/historico'
-import { Lead, Historico } from '@/types'
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
-import { format, subDays } from 'date-fns'
+import { getLeads, LeadsFilters } from '@/services/leads'
+import { getUsers } from '@/services/users'
+import { Lead, User } from '@/types'
+import { Bar, BarChart, XAxis, YAxis, PieChart, Pie, Cell, Legend } from 'recharts'
+import { format, subDays, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { Activity, BarChart3, Users, DollarSign } from 'lucide-react'
+import {
+  Activity,
+  Users,
+  DollarSign,
+  Calendar as CalendarIcon,
+  CheckCircle,
+  XCircle,
+  TrendingUp,
+} from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { DateRange } from 'react-day-picker'
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
-  const [historico, setHistorico] = useState<Historico[]>([])
+  const [usersList, setUsersList] = useState<User[]>([])
+
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 30),
+    to: new Date(),
+  })
+  const [status, setStatus] = useState<string>('all')
+  const [origem, setOrigem] = useState<string>('all')
+  const [colaboradorId, setColaboradorId] = useState<string>('all')
 
   useEffect(() => {
-    getLeads().then(setLeads)
-    getRecentHistorico().then(setHistorico)
-  }, [])
+    if (user?.role === 'gestor') {
+      getUsers().then(setUsersList)
+    }
+  }, [user])
 
-  const totalOrcamento = leads.reduce((acc, l) => acc + (l.valor_orcamento || 0), 0)
-  const pendentes = leads.filter((l) => ['Novo', 'Em Atendimento'].includes(l.status)).length
-  const conversao = leads.length
-    ? (leads.filter((l) => l.status === 'Vendido').length / leads.length) * 100
+  useEffect(() => {
+    const filters: LeadsFilters = {
+      dateFrom: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
+      dateTo: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
+      status,
+      origem,
+      colaboradorId,
+    }
+    getLeads(filters).then(setLeads)
+  }, [date, status, origem, colaboradorId])
+
+  const totalLeads = leads.length
+  const agendados = leads.filter((l) => l.status === 'Agendado').length
+  const comparecimentos = leads.filter((l) => l.status === 'Compareceu').length
+  const fechamentos = leads.filter((l) => l.status === 'Vendido').length
+  const faltas = leads.filter((l) => l.status === 'Perdido').length
+
+  const vendas = leads.filter((l) => l.status === 'Vendido')
+  const ticketMedio = vendas.length
+    ? vendas.reduce((acc, l) => acc + (l.valor_orcamento || 0), 0) / vendas.length
     : 0
 
-  const data = Array.from({ length: 7 }).map((_, i) => {
-    const d = subDays(new Date(), 6 - i)
-    const count = leads.filter((l) => l.created.startsWith(format(d, 'yyyy-MM-dd'))).length
-    return { name: format(d, 'dd/MM'), leads: count }
-  })
+  const taxaConversao = totalLeads ? (fechamentos / totalLeads) * 100 : 0
+
+  const monthlyData = useMemo(() => {
+    const map = leads.reduce(
+      (acc, lead) => {
+        const dateObj = parseISO(lead.created)
+        const month = format(dateObj, 'MMM/yy', { locale: ptBR })
+        if (!acc[month]) {
+          acc[month] = {
+            name: month,
+            leads: 0,
+            fechamentos: 0,
+            sortKey: format(dateObj, 'yyyy-MM'),
+          }
+        }
+        acc[month].leads += 1
+        if (lead.status === 'Vendido') acc[month].fechamentos += 1
+        return acc
+      },
+      {} as Record<string, { name: string; leads: number; fechamentos: number; sortKey: string }>,
+    )
+
+    return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+  }, [leads])
+
+  const origensData = useMemo(() => {
+    const map = leads.reduce(
+      (acc, lead) => {
+        const orig = lead.origem || 'Desconhecida'
+        if (!acc[orig]) acc[orig] = 0
+        acc[orig] += 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
+
+    const colors = [
+      'hsl(var(--chart-1))',
+      'hsl(var(--chart-2))',
+      'hsl(var(--chart-3))',
+      'hsl(var(--chart-4))',
+      'hsl(var(--chart-5))',
+    ]
+
+    return Object.entries(map).map(([name, value], i) => ({
+      name,
+      value,
+      fill: colors[i % colors.length],
+    }))
+  }, [leads])
+
+  const origensConfig = useMemo(() => {
+    return origensData.reduce(
+      (acc, curr) => {
+        acc[curr.name] = { label: curr.name, color: curr.fill }
+        return acc
+      },
+      {} as Record<string, any>,
+    )
+  }, [origensData])
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Visão Geral</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          Dashboard Comercial
+        </h1>
         <p className="text-muted-foreground mt-1">
-          Acompanhe as métricas principais do seu pipeline de vendas.
+          Acompanhe as métricas principais do seu pipeline de vendas e análise de performance.
         </p>
       </div>
 
+      <div className="flex flex-col gap-4 md:flex-row md:items-center bg-white dark:bg-slate-900 p-4 rounded-lg shadow-subtle border border-slate-100 dark:border-slate-800">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="date"
+              variant="outline"
+              className={cn(
+                'w-[300px] justify-start text-left font-normal bg-white dark:bg-slate-900',
+                !date && 'text-muted-foreground',
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {date?.from ? (
+                date.to ? (
+                  <>
+                    {format(date.from, 'dd/MM/yyyy')} - {format(date.to, 'dd/MM/yyyy')}
+                  </>
+                ) : (
+                  format(date.from, 'dd/MM/yyyy')
+                )
+              ) : (
+                <span>Selecione um período</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={date?.from}
+              selected={date}
+              onSelect={setDate}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os Status</SelectItem>
+            <SelectItem value="Novo">Novo</SelectItem>
+            <SelectItem value="Em Atendimento">Em Atendimento</SelectItem>
+            <SelectItem value="Agendado">Agendado</SelectItem>
+            <SelectItem value="Compareceu">Compareceu</SelectItem>
+            <SelectItem value="Vendido">Vendido</SelectItem>
+            <SelectItem value="Perdido">Perdido</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={origem} onValueChange={setOrigem}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Origem" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as Origens</SelectItem>
+            <SelectItem value="Indicação">Indicação</SelectItem>
+            <SelectItem value="Campanha">Campanha</SelectItem>
+            <SelectItem value="Parceria">Parceria</SelectItem>
+            <SelectItem value="Tráfego Pago">Tráfego Pago</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {user?.role === 'gestor' && (
+          <Select value={colaboradorId} onValueChange={setColaboradorId}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Colaborador" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Colaboradores</SelectItem>
+              {usersList.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name || u.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-none shadow-subtle bg-white">
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{leads.length}</div>
+            <div className="text-2xl font-bold">{totalLeads}</div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-subtle bg-white">
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Leads Pendentes</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Agendamentos</CardTitle>
+            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendentes}</div>
+            <div className="text-2xl font-bold">{agendados}</div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-subtle bg-white">
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Comparecimentos</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{conversao.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{comparecimentos}</div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-subtle bg-white">
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Orçamento em Curso</CardTitle>
+            <CardTitle className="text-sm font-medium">Fechamentos</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">{fechamentos}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Faltas</CardTitle>
+            <XCircle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">{faltas}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                totalOrcamento,
+                ticketMedio,
               )}
             </div>
           </CardContent>
         </Card>
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{taxaConversao.toFixed(1)}%</div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4 border-none shadow-subtle bg-white">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
           <CardHeader>
-            <CardTitle>Aquisição (Últimos 7 dias)</CardTitle>
+            <CardTitle>Performance Mensal (Leads vs Vendas)</CardTitle>
           </CardHeader>
-          <CardContent className="pl-2">
+          <CardContent>
             <ChartContainer
-              config={{ leads: { label: 'Leads', color: 'hsl(var(--primary))' } }}
+              config={{
+                leads: { label: 'Leads', color: 'hsl(var(--primary))' },
+                fechamentos: { label: 'Fechamentos', color: 'hsl(var(--chart-2))' },
+              }}
               className="h-[320px] w-full"
             >
-              <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tickMargin={10} />
                 <YAxis axisLine={false} tickLine={false} tickMargin={10} allowDecimals={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
@@ -101,33 +324,42 @@ export default function Dashboard() {
                   radius={[4, 4, 0, 0]}
                   maxBarSize={40}
                 />
+                <Bar
+                  dataKey="fechamentos"
+                  fill="var(--color-fechamentos)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={40}
+                />
               </BarChart>
             </ChartContainer>
           </CardContent>
         </Card>
-        <Card className="col-span-3 border-none shadow-subtle bg-white">
+
+        <Card className="border-none shadow-subtle bg-white dark:bg-slate-900">
           <CardHeader>
-            <CardTitle>Atividade Recente</CardTitle>
+            <CardTitle>Distribuição por Origem</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-6">
-              {historico.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma atividade recente.</p>
-              ) : (
-                historico.map((h) => (
-                  <div key={h.id} className="flex gap-4">
-                    <div className="w-2 h-2 mt-2 rounded-full bg-primary/80 shrink-0" />
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium leading-none">{h.expand?.lead_id?.nome}</p>
-                      <p className="text-sm text-muted-foreground">{h.acao}</p>
-                      <p className="text-xs text-muted-foreground/60">
-                        {new Date(h.created).toLocaleString('pt-BR')}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            <ChartContainer config={origensConfig} className="h-[320px] w-full">
+              <PieChart>
+                <Pie
+                  data={origensData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  label
+                >
+                  {origensData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Legend />
+              </PieChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       </div>
