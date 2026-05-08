@@ -140,9 +140,7 @@ export default function Login() {
           </form>
 
           <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
+            <div className="absolute inset-0 flex items-center"></div>
           </div>
 
           <div className="text-center text-xs text-muted-foreground lg:hidden">
