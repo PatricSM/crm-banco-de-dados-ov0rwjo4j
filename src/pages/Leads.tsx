@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, Search } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const STATUSES = ['Novo', 'Em Atendimento', 'Agendado', 'Compareceu', 'Vendido', 'Perdido']
 
@@ -32,12 +33,19 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
+  const [loading, setLoading] = useState(true)
 
-  const loadData = async () => setLeads(await getLeads())
+  const loadData = async (isRealtime = false) => {
+    if (!isRealtime) setLoading(true)
+    const data = await getLeads()
+    setLeads(data)
+    if (!isRealtime) setLoading(false)
+  }
+
   useEffect(() => {
     loadData()
   }, [])
-  useRealtime('leads', loadData)
+  useRealtime('leads', () => loadData(true))
 
   const filteredLeads = useMemo(() => {
     return leads.filter((l) => {
@@ -130,58 +138,84 @@ export default function LeadsPage() {
         </div>
 
         <TabsContent value="kanban" className="flex-1 overflow-x-auto mt-6 pb-4 outline-none">
-          <div className="flex gap-4 h-full min-h-[500px]">
-            {STATUSES.map((s) => (
-              <KanbanColumn key={s} status={s} />
-            ))}
-          </div>
+          {loading ? (
+            <div className="flex gap-4 h-full min-h-[500px]">
+              {STATUSES.map((s) => (
+                <div
+                  key={s}
+                  className="flex flex-col gap-3 w-80 shrink-0 bg-slate-100/50 rounded-xl p-4 h-full border border-slate-200/60 shadow-sm"
+                >
+                  <Skeleton className="h-6 w-24 mb-2" />
+                  <Skeleton className="h-28 w-full rounded-xl" />
+                  <Skeleton className="h-28 w-full rounded-xl" />
+                  <Skeleton className="h-28 w-full rounded-xl" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-4 h-full min-h-[500px]">
+              {STATUSES.map((s) => (
+                <KanbanColumn key={s} status={s} />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent
           value="lista"
           className="flex-1 overflow-y-auto mt-6 bg-white rounded-xl shadow-subtle border outline-none"
         >
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                <TableHead>Nome</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Responsável</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredLeads.map((l) => (
-                <TableRow
-                  key={l.id}
-                  className="cursor-pointer hover:bg-slate-50"
-                  onClick={() => navigate(`/leads/${l.id}`)}
-                >
-                  <TableCell className="font-medium">{l.nome}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="bg-slate-50">
-                      {l.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{l.origem || '-'}</TableCell>
-                  <TableCell className="font-medium text-emerald-600">
-                    {l.valor_orcamento ? `R$ ${l.valor_orcamento}` : '-'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {l.expand?.colaborador_id?.name || '-'}
-                  </TableCell>
+          {loading ? (
+            <div className="p-4 space-y-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/50">
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Responsável</TableHead>
                 </TableRow>
-              ))}
-              {filteredLeads.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Nenhum lead encontrado.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredLeads.map((l) => (
+                  <TableRow
+                    key={l.id}
+                    className="cursor-pointer hover:bg-slate-50"
+                    onClick={() => navigate(`/leads/${l.id}`)}
+                  >
+                    <TableCell className="font-medium">{l.nome}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-slate-50">
+                        {l.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{l.origem || '-'}</TableCell>
+                    <TableCell className="font-medium text-emerald-600">
+                      {l.valor_orcamento ? `R$ ${l.valor_orcamento}` : '-'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {l.expand?.colaborador_id?.name || '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredLeads.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      Nenhum lead encontrado.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </TabsContent>
       </Tabs>
     </div>

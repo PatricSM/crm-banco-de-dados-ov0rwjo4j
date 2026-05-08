@@ -7,19 +7,45 @@ import { LeadHistory } from '@/components/LeadHistory'
 import { createHistorico } from '@/services/historico'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Trash2 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useAuth } from '@/hooks/use-auth'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { deleteLead } from '@/services/leads'
 
 const STATUSES = ['Novo', 'Em Atendimento', 'Agendado', 'Compareceu', 'Vendido', 'Perdido']
 
 export default function LeadDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [lead, setLead] = useState<Lead | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const loadLead = async () => {
     if (id !== 'novo') {
-      const data = await getLead(id!)
-      setLead(data)
+      setLoading(true)
+      try {
+        const data = await getLead(id!)
+        setLead(data)
+      } catch (e) {
+        toast({ title: 'Erro', description: 'Lead não encontrado.', variant: 'destructive' })
+        navigate('/leads')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      setLoading(false)
     }
   }
 
@@ -27,17 +53,33 @@ export default function LeadDetails() {
     loadLead()
   }, [id])
 
+  const handleDelete = async () => {
+    if (!lead?.id) return
+    try {
+      await deleteLead(lead.id)
+      toast({ title: 'Lead Excluído', description: 'O lead foi removido com sucesso.' })
+      navigate('/leads')
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' })
+    }
+  }
+
   const handleSave = async (data: Partial<Lead>) => {
     try {
       if (id === 'novo') {
         const created = await createLead(data)
+        await createHistorico({
+          lead_id: created.id,
+          acao: 'Cadastro',
+          detalhes: 'Lead cadastrado no sistema.',
+        })
         toast({ title: 'Lead Criado', description: 'O lead foi salvo com sucesso.' })
         navigate(`/leads/${created.id}`)
       } else {
         await updateLead(id!, data)
         await createHistorico({
           lead_id: id!,
-          acao: 'Detalhes Atualizados',
+          acao: 'Edição',
           detalhes: 'Informações base do lead foram editadas.',
         })
         toast({ title: 'Lead Atualizado', description: 'O lead foi salvo com sucesso.' })
@@ -51,11 +93,12 @@ export default function LeadDetails() {
   const handleStatusChange = async (newStatus: string) => {
     if (!lead?.id || lead.status === newStatus) return
     try {
+      const oldStatus = lead.status
       await updateLead(lead.id, { status: newStatus as any })
       await createHistorico({
         lead_id: lead.id,
-        acao: 'Status Alterado',
-        detalhes: `Status movido para: ${newStatus}`,
+        acao: 'Mudança de Status',
+        detalhes: `Status alterado de "${oldStatus}" para "${newStatus}".`,
       })
       toast({ title: 'Status Atualizado' })
       loadLead()
@@ -64,12 +107,29 @@ export default function LeadDetails() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto w-full space-y-6 pb-12 animate-fade-in">
+        <Skeleton className="h-10 w-32" />
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <div className="grid md:grid-cols-2 gap-6">
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-5xl mx-auto w-full space-y-6 pb-12 animate-fade-in">
       <Button
         variant="ghost"
         onClick={() => navigate('/leads')}
-        className="text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground hover:bg-slate-100 transition-colors"
       >
         <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
       </Button>
@@ -85,6 +145,38 @@ export default function LeadDetails() {
             </p>
           )}
         </div>
+
+        {id !== 'novo' && user?.role === 'gestor' && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="hover:scale-105 transition-transform"
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Excluir Lead
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Essa ação não pode ser desfeita. Isso excluirá permanentemente o lead "
+                  {lead?.nome}" e todo o seu histórico de interações.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Sim, excluir
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {id !== 'novo' && lead && (

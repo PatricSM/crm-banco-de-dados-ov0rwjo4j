@@ -120,7 +120,11 @@ export function LeadForm({ lead, onSave }: LeadFormProps) {
       </div>
 
       <div className="pt-2">
-        <Button type="submit" disabled={loading} className="w-full">
+        <Button
+          type="submit"
+          disabled={loading}
+          className="w-full hover:scale-[1.02] transition-transform"
+        >
           {loading ? 'Salvando...' : 'Salvar Detalhes'}
         </Button>
       </div>
