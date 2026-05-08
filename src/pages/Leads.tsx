@@ -164,7 +164,7 @@ export default function LeadsPage() {
 
       <div className="flex-1 min-h-0 overflow-hidden">
         {viewMode === 'list' ? (
-          <div className="h-full overflow-y-auto pr-1">
+          <div className="h-full overflow-y-auto pr-1 scrollbar-thin">
             <LeadsList
               leads={paginatedLeads}
               isLoading={isLoading}
@@ -174,7 +174,7 @@ export default function LeadsPage() {
             />
           </div>
         ) : (
-          <div className="h-full pr-1">
+          <div className="h-full overflow-hidden">
             <LeadsKanban leads={leads} isLoading={isLoading} onStatusChange={handleStatusChange} />
           </div>
         )}
